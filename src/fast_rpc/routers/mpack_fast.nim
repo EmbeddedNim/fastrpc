@@ -4,13 +4,6 @@ import router
 import json
 import msgpack4nim/msgpack2json
 
-import nephyr/general
-import nephyr/net/tcpsocket
-
-export tcpsocket, router
-
-const TAG = "socketrpc"
-
 proc rpcMsgPackWriteHandler*(srv: TcpServerInfo[RpcRouter], result: ReadyKey, sourceClient: Socket, rt: RpcRouter) =
   raise newException(OSError, "the request to the OS failed")
 

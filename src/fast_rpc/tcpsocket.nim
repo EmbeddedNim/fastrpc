@@ -6,12 +6,7 @@ import posix
 
 export net, selectors, tables, posix
 
-import nephyr/logs
-
-initLogs("tcpsocket")
-
 const
-  TAG = "socketrpc"
   MsgChunk {.intdefine.} = 1400
 
 type 
