@@ -10,7 +10,7 @@ import std/sysrand
 import std/random
 import math
 
-import flatty/binny
+import binutils
 
 const
   defaultMaxUdpPacketSize = 1500
@@ -83,13 +83,7 @@ proc messageToBytes(message: Message, buf: var string) =
   buf.add(verTypeTkl.char)
 
   # Adding the id. Extend the buffer by the correct amount and add the 2 bytes
-  buf.addUint8(message.id shr 8)
-  var bytes: array[2, uint8]
-  bytes[0] = cast[uint8](message.id shr 8)
-  bytes[1] = cast[uint8](message.id and 0xFF)
-
-  for byte in bytes:
-    buf.add(byte.char)
+  buf.store16(message.id)
 
   buf.add(message.token)
 
@@ -99,29 +93,24 @@ proc messageToBytes(message: Message, buf: var string) =
 
 proc messageFromBytes(buf: string, address: Address): Message =
   result = Message()
+
+  let
+    verTypeTkl = cast[uint8](buf[idx])
+    version = verTypeTkl shr 6
   var idx = 0
-  let verTypeTkl = cast[uint8](buf[idx])
-  let version = verTypeTkl shr 6
   result.version = version
-  result.mtype = case ((0b00110000 and verTypeTkl) shr 4):
-    of 0: MessageType.Con
-    of 1: MessageType.Non
-    of 2: MessageType.Ack
-    of 3: MessageType.Rst
-    else:
-      raise
+  result.mtype = MessageType((0b00110000 and verTypeTkl) shr 4)
+
   let tkl: int = cast[int](0b00001111 and verTypeTkl)
-  idx += 1
+  inc(idx) 
 
   # Read 2 bytes for the id. These are in little endian so swap them
   # to get the id in network order
-  let id = cast[ptr uint16](buf[idx].unsafeAddr)[]
-  let tmp = cast[array[2, uint8]](id)
-  result.id = (tmp[0].uint16 shl 8) or tmp[1].uint16
-  idx += 2
+  result.id = buf.unstore16()
+  inc(idx, 2) 
 
   result.token = buf[idx ..< idx+tkl]
-  idx += tkl
+  inc(idx, tkl) 
 
   if cast[int](buf[idx]) == 0xFF:
     result.data = buf[idx+1 ..< buf.len]

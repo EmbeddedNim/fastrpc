@@ -32,20 +32,19 @@ const pack_value_nil* = chr(0xc0)
 
 type
 
-  Stream* = ref object
+  MsgBuffer* = ref object
     data*: string
     pos*: int
 
-  MsgBuffer* = MsgStream | var string
-
-proc init*(x: typedesc[Stream], cap: int = 0): Stream =
+proc initMsgBuffer*(x: typedesc[MsgBuffer], cap: int = 0): MsgBuffer =
   result = new(x)
   result.data = newStringOfCap(cap)
   result.pos = 0
 
-proc init*(x: typedesc[Stream], data: string): Stream =
+proc initMsgBuffer*(x: typedesc[MsgBuffer], data: owned string): MsgBuffer =
   result = new(x)
-  shallowCopy(result.data, data)
+  # shallowCopy(result.data, data)
+  result.data = data
   result.pos = 0
 
 proc writeData(s: MsgBuffer, buffer: pointer, bufLen: int) =
@@ -103,10 +102,6 @@ proc setPosition*(s: MsgBuffer, pos: int) =
 proc atEnd*(s: MsgBuffer): bool =
   return s.pos >= s.data.len
 
-proc conversionError*(msg: string): ref ObjectConversionError =
-  new(result)
-  result.msg = msg
-
 template skipUndistinct* {.pragma, deprecated.}
   # no need to use this pragma anymore
   # the undistinct macro is more clever now
@@ -118,7 +113,7 @@ proc getParamIdent(n: NimNode): NimNode =
   else:
     result = n[0]
 
-proc hasDistinctImpl(w: NimNode, z: NimNode): bool =
+proc hasDistinctImpl*(w: NimNode, z: NimNode): bool =
   for k in w:
     let p = k.getImpl()[3][2][1]
     if p.kind in {nnkIdent, nnkVarTy, nnkSym}:
