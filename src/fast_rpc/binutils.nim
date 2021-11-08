@@ -31,40 +31,20 @@ import endians, macros, streams
 const pack_value_nil* = chr(0xc0)
 
 type
-  EncodingMode* = enum
-    MSGPACK_OBJ_TO_DEFAULT
-    MSGPACK_OBJ_TO_ARRAY
-    MSGPACK_OBJ_TO_MAP
-    MSGPACK_OBJ_TO_STREAM
 
   MsgStream* = ref object
     data*: string
     pos*: int
-    encodingMode: EncodingMode
 
-proc init*(x: typedesc[MsgStream], cap: int = 0, encodingMode = MSGPACK_OBJ_TO_DEFAULT): MsgStream =
+proc init*(x: typedesc[MsgStream], cap: int = 0): MsgStream =
   result = new(x)
   result.data = newStringOfCap(cap)
   result.pos = 0
-  result.encodingMode = encodingMode
 
-proc init*(x: typedesc[MsgStream], data: string, encodingMode = MSGPACK_OBJ_TO_DEFAULT): MsgStream =
+proc init*(x: typedesc[MsgStream], data: string): MsgStream =
   result = new(x)
   shallowCopy(result.data, data)
   result.pos = 0
-  result.encodingMode = encodingMode
-
-proc initMsgStream*(cap: int = 0, encodingMode = MSGPACK_OBJ_TO_DEFAULT): MsgStream {.deprecated: "use MsgStream.init instead".} =
-  result = MsgStream.init(cap, encodingMode)
-
-proc initMsgStream*(data: string, encodingMode = MSGPACK_OBJ_TO_DEFAULT): MsgStream {.deprecated: "use MsgStream.init instead".} =
-  result = MsgStream.init(data, encodingMode)
-
-proc setEncodingMode*(s: MsgStream, encodingMode: EncodingMode) =
-  s.encodingMode = encodingMode
-
-proc getEncodingMode*(s: MsgStream): EncodingMode =
-  s.encodingMode
 
 proc writeData(s: MsgStream, buffer: pointer, bufLen: int) =
   if bufLen <= 0: return
