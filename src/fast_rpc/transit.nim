@@ -10,6 +10,8 @@ import std/sysrand
 import std/random
 import math
 
+import flatty/binny
+
 const
   defaultMaxUdpPacketSize = 1500
   defaultMaxInFlight = 2000 # Arbitrary number of packets in flight that we'll allow
@@ -73,20 +75,15 @@ proc ack*(message: Message, data: string): Message =
   result.address = message.address
 
 proc messageToBytes(message: Message, buf: var string) =
-  let mtype: uint8 = case message.mtype.uint8()
-    of MessageType.Con: 0
-    of MessageType.Non: 1
-    of MessageType.Ack: 2
-    of MessageType.Rst: 3
-
   let ver = message.version shl 6
-  let typ = mtype shl 4
+  let typ = message.mtype.uint8() shl 4
   let tkl = cast[uint8](message.token.len)
 
   let verTypeTkl = ver or typ or tkl
   buf.add(verTypeTkl.char)
 
   # Adding the id. Extend the buffer by the correct amount and add the 2 bytes
+  buf.addUint8(message.id shr 8)
   var bytes: array[2, uint8]
   bytes[0] = cast[uint8](message.id shr 8)
   bytes[1] = cast[uint8](message.id and 0xFF)
