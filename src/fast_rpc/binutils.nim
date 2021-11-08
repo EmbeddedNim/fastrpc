@@ -32,36 +32,38 @@ const pack_value_nil* = chr(0xc0)
 
 type
 
-  MsgStream* = ref object
+  Stream* = ref object
     data*: string
     pos*: int
 
-proc init*(x: typedesc[MsgStream], cap: int = 0): MsgStream =
+  MsgBuffer* = MsgStream | var string
+
+proc init*(x: typedesc[Stream], cap: int = 0): Stream =
   result = new(x)
   result.data = newStringOfCap(cap)
   result.pos = 0
 
-proc init*(x: typedesc[MsgStream], data: string): MsgStream =
+proc init*(x: typedesc[Stream], data: string): Stream =
   result = new(x)
   shallowCopy(result.data, data)
   result.pos = 0
 
-proc writeData(s: MsgStream, buffer: pointer, bufLen: int) =
+proc writeData(s: MsgBuffer, buffer: pointer, bufLen: int) =
   if bufLen <= 0: return
   if s.pos + bufLen > s.data.len:
     setLen(s.data, s.pos + bufLen)
   copyMem(addr(s.data[s.pos]), buffer, bufLen)
   inc(s.pos, bufLen)
 
-proc write*[T](s: MsgStream, val: T) =
+proc write*[T](s: MsgBuffer, val: T) =
   var y: T
   shallowCopy(y, val)
   writeData(s, addr(y), sizeof(y))
 
-proc write*(s: MsgStream, val: string) =
+proc write*(s: MsgBuffer, val: string) =
   if val.len > 0: writeData(s, unsafeAddr val[0], val.len)
 
-proc readData(s: MsgStream, buffer: pointer, bufLen: int): int =
+proc readData(s: MsgBuffer, buffer: pointer, bufLen: int): int =
   result = min(bufLen, s.data.len - s.pos)
   if result > 0:
     copyMem(buffer, addr(s.data[s.pos]), result)
@@ -69,36 +71,36 @@ proc readData(s: MsgStream, buffer: pointer, bufLen: int): int =
   else:
     result = 0
 
-proc read*[T](s: MsgStream, result: var T) =
+proc read*[T](s: MsgBuffer, result: var T) =
   if s.readData(addr(result), sizeof(T)) != sizeof(T):
     doAssert(false)
 
-proc readStr*(s: MsgStream, length: int): string =
+proc readStr*(s: MsgBuffer, length: int): string =
   result = newString(length)
   if length != 0:
     var L = s.readData(addr(result[0]), length)
     if L != length: raise newException(IOError, "string len mismatch")
 
-proc readChar*(s: MsgStream): char =
+proc readChar*(s: MsgBuffer): char =
   s.read(result)
 
-proc readInt16*(s: MsgStream): int16 =
+proc readInt16*(s: MsgBuffer): int16 =
   s.read(result)
 
-proc readInt32*(s: MsgStream): int32 =
+proc readInt32*(s: MsgBuffer): int32 =
   s.read(result)
 
-proc readInt64*(s: MsgStream): int64 =
+proc readInt64*(s: MsgBuffer): int64 =
   s.read(result)
 
-proc peekChar*(s: MsgStream): char =
+proc peekChar*(s: MsgBuffer): char =
   if s.pos < s.data.len: result = s.data[s.pos]
   else: result = chr(0)
 
-proc setPosition*(s: MsgStream, pos: int) =
+proc setPosition*(s: MsgBuffer, pos: int) =
   s.pos = clamp(pos, 0, s.data.len)
 
-proc atEnd*(s: MsgStream): bool =
+proc atEnd*(s: MsgBuffer): bool =
   return s.pos >= s.data.len
 
 proc conversionError*(msg: string): ref ObjectConversionError =
