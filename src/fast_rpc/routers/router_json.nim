@@ -1,8 +1,8 @@
 import json, tables, strutils, macros, options
 
-import marshal
+import marshal_json
 
-export marshal
+export marshal_json
 ## Code copied from: status-im/nim-json-rpc is licensed under the Apache License 2.0
 
 type
