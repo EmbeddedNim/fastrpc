@@ -74,8 +74,8 @@ proc processWrites[T](selected: ReadyKey, srv: TcpServerInfo[T], data: T) =
     srv.writeHandler(srv, selected, sourceClient, data)
 
 proc processReads[T](selected: ReadyKey, srv: TcpServerInfo[T], data: T) = 
-  logDebug("process reads on: fd:%d srvfd:%d", selected.fd, srv.server.getFd().int)
   for server in srv.servers:
+    logDebug("process reads on:", "fd:", selected.fd, "srvfd:", server.getFd().int)
     if SocketHandle(selected.fd) == server.getFd():
       var client: Socket = new(Socket)
       server.accept(client)
