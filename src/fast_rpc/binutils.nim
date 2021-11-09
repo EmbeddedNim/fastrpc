@@ -36,15 +36,14 @@ type
     data*: string
     pos*: int
 
-proc initMsgBuffer*(x: typedesc[MsgBuffer], cap: int = 0): MsgBuffer =
+proc init*(x: typedesc[MsgBuffer], cap: int = 0): MsgBuffer =
   result = new(x)
   result.data = newStringOfCap(cap)
   result.pos = 0
 
-proc initMsgBuffer*(x: typedesc[MsgBuffer], data: owned string): MsgBuffer =
+proc init*(x: typedesc[MsgBuffer], data: string): MsgBuffer =
   result = new(x)
-  # shallowCopy(result.data, data)
-  result.data = data
+  shallowCopy(result.data, data)
   result.pos = 0
 
 proc writeData(s: MsgBuffer, buffer: pointer, bufLen: int) =
@@ -79,6 +78,15 @@ proc readStr*(s: MsgBuffer, length: int): string =
   if length != 0:
     var L = s.readData(addr(result[0]), length)
     if L != length: raise newException(IOError, "string len mismatch")
+
+proc readMsgBuffer*(s: MsgBuffer, length: int): MsgBuffer =
+  result = MsgBuffer.init(length)
+  if length != 0:
+    var L = s.readData(addr(result.data[0]), length)
+    result.pos = L
+
+proc readMsgBufferRemaining*(s: MsgBuffer): MsgBuffer =
+  result = s.readMsgBuffer(s.data.len() - s.pos)
 
 proc readChar*(s: MsgBuffer): char =
   s.read(result)

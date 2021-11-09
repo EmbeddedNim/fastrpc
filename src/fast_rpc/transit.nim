@@ -74,46 +74,43 @@ proc ack*(message: Message, data: string): Message =
   result.mtype = MessageType.Ack
   result.address = message.address
 
-proc messageToBytes(message: Message, buf: var string) =
+proc messageToBytes(message: Message, buf: var MsgBuffer) =
   let ver = message.version shl 6
   let typ = message.mtype.uint8() shl 4
-  let tkl = cast[uint8](message.token.len)
+  let tkl = uint8(message.token.len())
 
   let verTypeTkl = ver or typ or tkl
-  buf.add(verTypeTkl.char)
+  buf.write(verTypeTkl.char)
 
   # Adding the id. Extend the buffer by the correct amount and add the 2 bytes
   buf.store16(message.id)
 
-  buf.add(message.token)
+  buf.write(message.token)
 
   if message.data != "":
-    buf.add(0xFF.char)
-    buf.add(message.data)
+    buf.write(0xFF.char)
+    buf.write(message.data)
 
-proc messageFromBytes(buf: string, address: Address): Message =
+proc messageFromBytes(buf: var MsgBuffer, address: Address): Message =
   result = Message()
 
   let
-    verTypeTkl = cast[uint8](buf[idx])
+    verTypeTkl = uint8(buf.readChar())
     version = verTypeTkl shr 6
-  var idx = 0
-  result.version = version
-  result.mtype = MessageType((0b00110000 and verTypeTkl) shr 4)
 
-  let tkl: int = cast[int](0b00001111 and verTypeTkl)
-  inc(idx) 
+  result.version = version
+  result.mtype = MessageType((0b0011_0000 and verTypeTkl) shr 4)
+
+  let tkl: int = int(0b0000_1111 and verTypeTkl)
 
   # Read 2 bytes for the id. These are in little endian so swap them
   # to get the id in network order
   result.id = buf.unstore16()
-  inc(idx, 2) 
 
-  result.token = buf[idx ..< idx+tkl]
-  inc(idx, tkl) 
+  result.token = buf.readStr(tkl)
 
-  if cast[int](buf[idx]) == 0xFF:
-    result.data = buf[idx+1 ..< buf.len]
+  if buf.readChar().uint8 == 0xFF:
+    result.data = buf.readMsgBufferRemaining()
 
   result.address = address
 
@@ -134,9 +131,9 @@ proc sendMessages(reactor: Reactor) =
       reactor.failedMessages.add(msg)
       continue
 
-    var buf = newStringOfCap(reactor.debug.maxUdpPacketSize)
+    var buf = MsgBuffer.init(reactor.debug.maxUdpPacketSize)
     messageToBytes(msg, buf)
-    reactor.socket.sendTo(msg.address.host, msg.address.port, buf)
+    reactor.socket.sendTo(msg.address.host, msg.address.port, buf.data)
 
     if msg.mtype == MessageType.Con:
       let nextDelay = reactor.debug.baseBackoff * 2 ^ msg.attempt
@@ -171,11 +168,15 @@ proc readMessages(reactor: Reactor) =
       # TODO - WE need to throw a real error here probably. An error indicates
       # something has gone wrong with the socket
       break
-    let address = initAddress(host, port)
-    let message = messageFromBytes(buf, address)
+  
+    var
+      msgBuf = MsgBuffer.init(buf) # performs shallow copy!
+    let
+      address = initAddress(host, port)
+      message = messageFromBytes(msgBuf, address)
 
     # If this is an ack than match it with any existing sends and move on
-    var toDelete: seq[int] = @[]
+    var toDelete = newSeq[int]()
 
     # Scan the toSend buffer and record their index if they match the id of the
     # message we just received. Once we're done we can delete each index from the
