@@ -2,3 +2,4 @@ nimcache/
 nimblecache/
 htmldocs/
 nimcache*
+src/fast_rpc/tcpsocket

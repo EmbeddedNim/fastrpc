@@ -12,3 +12,4 @@ bin           = @["fast_rpc"]
 # Dependencies
 
 requires "nim >= 1.6.0"
+requires "mcu_utils >= 0.1.0"

@@ -5,62 +5,8 @@ import tables
 import posix
 
 export net, selectors, tables, posix
-import macros
-import sequtils
 
-# import chronicles 
-
-# macro logger*(args: varargs[untyped]) =
-#   var prints = newSeq[NimNode]()
-#   for arg in args:
-#     let a = 
-#       if arg.kind == nnkExprEqExpr:
-#         let arg1 = arg[1]
-#         quote do: $(`arg1`)
-#       else: 
-#         quote do: $(`arg`)
-#     prints.add(a)
-#   result = newCall(newIdentNode("echo"), prints)
-
-# template error*(args: varargs[untyped]) =
-#   discard "ignore"
-#   logger args
-# template debug*(args: varargs[untyped]) =
-#   discard "ignore"
-#   logger args
-# template info*(args: varargs[untyped]) =
-#   discard "ignore"
-#   logger args
-
-import std/logging
-
-var mylogger = newConsoleLogger()
-
-macro dologs*(lvl, args: varargs[untyped]) =
-  var prints = newSeq[NimNode]()
-  for arg in args:
-    let a = 
-      if arg.kind == nnkExprEqExpr:
-        let arg1 = arg[1]
-        quote do: $(`arg1`)
-      else: 
-        quote do: $(`arg`)
-    prints.add(a)
-  var ml = quote do: mylogger
-  prints.insert(lvl, 0)
-  prints.insert(ml, 0)
-  result = newCall("log", prints)
-  echo "RESULT: ", treeRepr result
-
-template error*(args: varargs[untyped]) =
-  discard "ignore"
-  dologs(lvlError, args)
-template debug*(args: varargs[untyped]) =
-  discard "ignore"
-  dologs(lvlDebug, args)
-template info*(args: varargs[untyped]) =
-  discard "ignore"
-  dologs(lvlInfo, args)
+import mcu_utils/logging
 
 const
   MsgChunk {.intdefine.} = 1400
@@ -86,11 +32,11 @@ template sendWrap*(socket: Socket, data: untyped) =
 
 proc sendChunks*(sourceClient: Socket, rmsg: string) =
   let rN = rmsg.len()
-  # debug("rpc handler send client: %d bytes", rN)
+  logDebug("rpc handler send client: %d bytes", rN)
   var i = 0
   while i < rN:
     var j = min(i + MsgChunk, rN) 
-    # debug("rpc handler sending: i: %s j: %s ", $i, $j)
+    # logDebug("rpc handler sending: i: %s j: %s ", $i, $j)
     var sl = rmsg[i..<j]
     sourceClient.sendWrap(move sl)
     i = j
@@ -128,7 +74,7 @@ proc processWrites[T](selected: ReadyKey, srv: TcpServerInfo[T], data: T) =
     srv.writeHandler(srv, selected, sourceClient, data)
 
 proc processReads[T](selected: ReadyKey, srv: TcpServerInfo[T], data: T) = 
-  debug("process reads on: ", fd = selected.fd)
+  logDebug("process reads on: fd:%d srvfd:%d", selected.fd, srv.server.getFd().int)
   for server in srv.servers:
     if SocketHandle(selected.fd) == server.getFd():
       var client: Socket = new(Socket)
@@ -139,7 +85,7 @@ proc processReads[T](selected: ReadyKey, srv: TcpServerInfo[T], data: T) =
       srv.clients[client.getFd()] = client
 
       let id: int = client.getFd().int
-      debug("client connected: %d", id)
+      logDebug("client connected: %d", id)
       return
 
   if srv.clients.hasKey(SocketHandle(selected.fd)):
@@ -156,14 +102,14 @@ proc processReads[T](selected: ReadyKey, srv: TcpServerInfo[T], data: T) =
       discard srv.clients.pop(sourceFd.SocketHandle, client)
       srv.select.unregister(sourceFd)
       discard posix.close(sourceFd.cint)
-      error("client disconnected: fd: ", sourceFd)
+      logError("client disconnected: fd: ", $sourceFd)
 
     except TcpClientError as err:
       srv.clients.del(sourceFd.SocketHandle)
       srv.select.unregister(sourceFd)
 
       discard posix.close(sourceFd.cint)
-      error("client read error: ", sourceFd)
+      logError("client read error: ", $(sourceFd))
 
     return
 
@@ -177,7 +123,7 @@ proc echoReadHandler*(srv: TcpServerInfo[string], result: ReadyKey, sourceClient
     raise newException(TcpClientDisconnected, "")
 
   else:
-    debug("received msg: ", message)
+    logDebug("received from client: %s", message)
 
     for cfd, client in srv.clients:
       # if sourceClient.getFd() == cfd.getFd():
@@ -188,7 +134,7 @@ proc startSocketServer*[T](port: Port, ipaddrs: openArray[IpAddress], readHandle
   var select: Selector[T] = newSelector[T]()
   var servers = newSeq[Socket]()
   for ipaddr in ipaddrs:
-    info "Server: starting "
+    logInfo "Server: starting "
     let domain = if ipaddr.family == IpAddressFamily.IPv6: Domain.AF_INET6 else: Domain.AF_INET6 
     # var server: Socket = newSocket(domain=domain)
     var server: Socket = newSocket()
@@ -199,7 +145,7 @@ proc startSocketServer*[T](port: Port, ipaddrs: openArray[IpAddress], readHandle
     server.listen()
     servers.add server
 
-    info "Server: started on: ip: ", ipaddr, port
+    logInfo "Server: started on: ip: ", $ipaddr, " port: ", $port
     select.registerHandle(server.getFd(), {Event.Read}, data)
   
   var srv = createServerInfo[T](select, servers)
@@ -223,6 +169,5 @@ proc startSocketServer*[T](port: Port, ipaddrs: openArray[IpAddress], readHandle
   for server in servers:
     server.close()
 
-when isMainModule:
-  var data = ""
-  startSocketServer(Port(5555), ipaddrs=[IPv6_any()], readHandler=echoReadHandler, writeHandler=nil, data=data)
+# when isMainModule:
+  # startSocketServer(Port(5555), readHandler=echoReadHandler, writeHandler=nil)
