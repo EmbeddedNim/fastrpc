@@ -1,72 +1,238 @@
-import net, selectors, tables, posix
+import json, tables, strutils, macros, options
 
-import router
-import json
-import msgpack4nim/msgpack2json
+import marshal
 
-proc rpcMsgPackWriteHandler*(srv: TcpServerInfo[RpcRouter], result: ReadyKey, sourceClient: Socket, rt: RpcRouter) =
-  raise newException(OSError, "the request to the OS failed")
+export marshal
+## Code copied from: status-im/nim-json-rpc is licensed under the Apache License 2.0
 
-proc rpcMsgPackReadHandler*(srv: TcpServerInfo[RpcRouter], result: ReadyKey, sourceClient: Socket, rt: RpcRouter) =
-  # TODO: improvement
-  # The incoming RPC call needs to be less than 1400 or the network buffer size.
-  # This could be improved, but is a bit finicky. In my usage, I only send small
-  # RPC calls with possibly larger responses. 
+type
+  JsonRpcCall* = object
+    jsonrpc*: string
+    `method`*: string
+    params*: JsonNode
+    id*: int
 
-  try:
-    logd("rpc server handler: router: %x", rt.buffer)
+type
+  RpcJsonError* = enum
+    rjeInvalidJson, rjeVersionError, rjeNoMethod, rjeNoId, rjeNoParams, rjeNoJObject
+  RpcJsonErrorContainer* = tuple[err: RpcJsonError, msg: string]
 
-    var rcall: JsonNode
-    var tu0: uint64 = 0
+  # Procedure signature accepted as an RPC call by server
+  RpcProc* = proc(input: JsonNode): JsonNode {.gcsafe.}
 
-    block rxmsg:
-      var msg = sourceClient.recv(rt.buffer, -1)
+  RpcProcError* = object of ValueError
+    code*: int
+    data*: JsonNode
 
-      tu0 = micros()
+  RpcBindError* = object of ValueError
+  RpcAddressUnresolvableError* = object of ValueError
 
-      if msg.len() == 0:
-        raise newException(TcpClientDisconnected, "")
-      else:
-        logd("data from client: ", $(sourceClient.getFd().int))
-        logd("data from client:l: ", msg.len())
-        rcall = msgpack2json.toJsonNode(msg)
-        logd("done parsing mpack ")
+  RpcRouter* = ref object
+    procs*: Table[string, RpcProc]
+    buffer*: int
 
-    var res: JsonNode
-    block pres:
-        logd("route rpc message: ", )
-        logd("method: ", $rcall["method"])
-        logd("route rpc route: ", )
-        res = rt.route(rcall)
+proc wrapResponse*(rpcCall: JsonRpcCall, ret: JsonNode): JsonNode = 
+  result = %* {"jsonrpc": "2.0", "result": ret, "id": rpcCall.id}
 
-    var rmsg: string
-    block prmsg:
-        logd("call ran", )
-        rmsg = msgpack2json.fromJsonNode(move res)
-    
-    let tu3 = micros()
+proc wrapError*(rpcCall: JsonRpcCall, code: int, message: string): JsonNode = 
+  result = %* {
+    "jsonrpc": "2.0",
+    "error": { "code": code, "message": message, },
+    "id": rpcCall.id
+  }
 
-    # echo "rpc took: ", tu3 - tu0, " us"
+proc rpcParseError*(): JsonNode = 
+  result = %* {
+    "jsonrpc": "2.0",
+    "error": { "code": -32700, "message": "Parse error" },
+    "id": nil
+  }
 
-    block txres:
+proc rpcInvalidRequest*(detail: string): JsonNode = 
+  result = %* {
+    "jsonrpc": "2.0",
+    "error": { "code": -32600, "message": "Invalid request", "detail": detail },
+    "id": nil
+  }
 
-        logd("rmsg len: ", rmsg.len())
-        logd("sending len to client: ", $(sourceClient.getFd().int))
-        sourceClient.sendLength(rmsg)
-        logd("sending data to client: ", $(sourceClient.getFd().int))
-        sourceClient.sendChunks(rmsg)
+proc rpcInvalidRequest*(id: int, detail: string): JsonNode = 
+  result = %* {
+    "jsonrpc": "2.0",
+    "error": { "code": -32600, "message": "Invalid request", "detail": detail },
+    "id": id
+  }
 
-  except TimeoutError:
-    echo("control server: error: socket timeout: ", $sourceClient.getFd().int)
 
-proc startRpcSocketServer*(port: Port; router: var RpcRouter) =
-  logi("starting mpack rpc server: buffer: %s", $router.buffer)
+const
+  methodField = "method"
+  paramsField = "params"
+  # jsonRpcField = "jsonrpc"
+  idField = "id"
+  # messageTerminator = "\c\l"
 
-  startSocketServer[RpcRouter](
-    port=port,
-    ipaddrs=[IPv4_any()],
-    readHandler=rpcMsgPackReadHandler,
-    writeHandler=rpcMsgPackWriteHandler,
-    data=router)
-    
+  JSON_PARSE_ERROR* = -32700
+  INVALID_REQUEST* = -32600
+  METHOD_NOT_FOUND* = -32601
+  INVALID_PARAMS* = -32602
+  INTERNAL_ERROR* = -32603
+  SERVER_ERROR* = -32000
 
+  defaultMaxRequestLength* = 1024 * 128
+  jsonErrorMessages*: array[RpcJsonError, (int, string)] =
+    [
+      (JSON_PARSE_ERROR, "Invalid JSON"),
+      (INVALID_REQUEST, "JSON 2.0 required"),
+      (INVALID_REQUEST, "No method requested"),
+      (INVALID_REQUEST, "No id specified"),
+      (INVALID_PARAMS, "No parameters specified"),
+      (INVALID_PARAMS, "Invalid request object")
+    ]
+
+proc createRpcRouter*(max_buffer: int): RpcRouter =
+  result = new(RpcRouter)
+  result.procs = initTable[string, RpcProc]()
+  result.buffer = max_buffer
+  echo "createRpcRouter: " & $(result.buffer)
+
+proc register*(router: var RpcRouter, path: string, call: RpcProc) =
+  router.procs[path] = call
+
+proc clear*(router: var RpcRouter) = router.procs.clear
+
+proc hasMethod*(router: RpcRouter, methodName: string): bool = router.procs.hasKey(methodName)
+
+# func isEmpty(node: JsonNode): bool = node.isNil or node.kind == JNull
+
+# Json reply wrappers
+
+proc wrapReply*(id: JsonNode, value: JsonNode): JsonNode =
+  return %* {"jsonrpc":"2.0", "id": id, "result": value}
+
+proc wrapReplyError*(id: JsonNode, error: JsonNode): JsonNode =
+  return %* {"jsonrpc":"2.0", "id": id, "error": error}
+
+when defined(RpcRouterIncludeTraceBack):
+  proc `%`(err: StackTraceEntry): JsonNode =
+    # StackTraceEntry = object
+    # procname*: cstring         ## Name of the proc that is currently executing.
+    # line*: int                 ## Line number of the proc that is currently executing.
+    # filename*: cstring         ## Filename of the proc that is currently executing.
+    let
+      pc: string = $err.procname
+      fl: string = $err.filename
+      ln: int = err.line.int
+
+    return %* (procname: pc, line: err.line, filename: fl)
+
+proc wrapError*(code: int, msg: string, id: JsonNode,
+                data: JsonNode = newJNull(), err: ref Exception = nil): JsonNode {.gcsafe.} =
+  # Create standardised error json
+  result = %* { "code": code, "id": id, "message": escapeJson(msg), "data": data }
+
+  when defined(RpcRouterIncludeTraceBack):
+    if err != nil:
+      result["stacktrace"] = %* err.getStackTraceEntries()
+  
+  echo "Error generated: ", "result: ", result, " id: ", id
+
+when defined(RpcRouterIncludeTraceBack):
+  template wrapException(body: untyped) =
+    try:
+      body
+    except: 
+      let msg = getCurrentExceptionMsg()
+      echo("control server: invalid input: error: ", msg)
+      let resp = rpcInvalidRequest(msg)
+      return resp
+
+
+proc route*(router: RpcRouter, node: JsonNode): JsonNode {.gcsafe.} =
+  ## Assumes correct setup of node
+  let
+    methodName = node[methodField].str
+    id = node[idField]
+    rpcProc = router.procs.getOrDefault(methodName)
+
+  if rpcProc.isNil:
+    let
+      methodNotFound = %(methodName & " is not a registered RPC method.")
+      error = wrapError(METHOD_NOT_FOUND, "Method not found", id, methodNotFound)
+    result = wrapReplyError(id, error)
+  else:
+    try:
+      let jParams = node[paramsField]
+      let res = rpcProc(jParams)
+      result = wrapReply(id, res)
+    except CatchableError as err:
+      # echo "Error occurred within RPC", " methodName: ", methodName, "errorMessage = ", err.msg
+      let error = wrapError(SERVER_ERROR, methodName & " raised an exception",
+                            id, % err.msg[0..<min(err.msg.len(), 128)], err)
+      result = wrapReplyError(id, error)
+      # echo "Error wrap done "
+
+proc makeProcName(s: string): string =
+  result = ""
+  for c in s:
+    if c.isAlphaNumeric: result.add c
+
+proc hasReturnType(params: NimNode): bool =
+  if params != nil and params.len > 0 and params[0] != nil and
+     params[0].kind != nnkEmpty:
+    result = true
+
+macro rpc*(server: RpcRouter, path: string, body: untyped): untyped =
+  ## Define a remote procedure call.
+  ## Input and return parameters are defined using the ``do`` notation.
+  ## For example:
+  ## .. code-block:: nim
+  ##    myServer.rpc("path") do(param1: int, param2: float) -> string:
+  ##      result = $param1 & " " & $param2
+  ##    ```
+  ## Input parameters are automatically marshalled from json to Nim types,
+  ## and output parameters are automatically marshalled to json for transport.
+  result = newStmtList()
+  let
+    parameters = body.findChild(it.kind == nnkFormalParams)
+    # all remote calls have a single parameter: `params: JsonNode`
+    paramsIdent = newIdentNode"params"
+    # procs are generated from the stripped path
+    pathStr = $path
+    # strip non alphanumeric
+    procNameStr = pathStr.makeProcName
+    # public rpc proc
+    procName = newIdentNode(procNameStr)
+    # when parameters present: proc that contains our rpc body
+    doMain = newIdentNode(procNameStr & "DoMain")
+    # async result
+    # res = newIdentNode("result")
+    # errJson = newIdentNode("errJson")
+  var
+    setup = jsonToNim(parameters, paramsIdent)
+    procBody = if body.kind == nnkStmtList: body else: body.body
+
+  let ReturnType = if parameters.hasReturnType: parameters[0]
+                   else: ident "JsonNode"
+
+  # delegate async proc allows return and setting of result as native type
+  result.add quote do:
+    proc `doMain`(`paramsIdent`: JsonNode): `ReturnType` =
+      {.cast(gcsafe).}:
+        `setup`
+        `procBody`
+
+  if ReturnType == ident"JsonNode":
+    # `JsonNode` results don't need conversion
+    result.add quote do:
+      proc `procName`(`paramsIdent`: JsonNode): JsonNode {.gcsafe.} =
+        return `doMain`(`paramsIdent`)
+  else:
+    result.add quote do:
+      proc `procName`(`paramsIdent`: JsonNode): JsonNode {.gcsafe.} =
+        return %* `doMain`(`paramsIdent`)
+
+
+  result.add quote do:
+    `server`.register(`path`, `procName`)
+
+  when defined(nimDumpRpcs):
+    echo "\n", pathStr, ": ", result.repr
