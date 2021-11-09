@@ -60,6 +60,8 @@ proc write*[T](s: MsgBuffer, val: T) =
 
 proc write*(s: MsgBuffer, val: string) =
   if val.len > 0: writeData(s, unsafeAddr val[0], val.len)
+proc write*(s: MsgBuffer, val: string, length: int) =
+  if val.len > 0: writeData(s, unsafeAddr val[0], min(val.len(), length))
 
 proc readData(s: MsgBuffer, buffer: pointer, bufLen: int): int =
   result = min(bufLen, s.data.len - s.pos)
