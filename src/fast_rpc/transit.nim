@@ -23,6 +23,7 @@ const
 type
   MsgId* = distinct uint16
   MsgToken* = distinct string
+  MsgVersion* = distinct uint8
 
   Address* = object
     host*: string
@@ -33,7 +34,7 @@ type
 
   Message* = ref object
     address*: Address
-    version*: uint8
+    version*: MsgVersion
     id*: MsgId
     mtype*: MessageType
     token*: MsgToken
@@ -61,8 +62,10 @@ type
 
 proc `==` *(x, y: MsgId): bool {.borrow.}
 proc `==` *(x, y: MsgToken): bool {.borrow.}
+proc `==` *(x, y: MsgVersion): bool {.borrow.}
 proc `$` *(x: MsgId): string {.borrow.}
 proc `$` *(x: MsgToken): string {.borrow.}
+proc `$` *(x: MsgVersion): string {.borrow.}
 
 proc initAddress*(host: string, port: Port): Address =
   result.host = host
@@ -74,7 +77,7 @@ proc initAddress*(host: string, port: int): Address =
 
 proc ack*(message: Message, data: string): Message =
   result = Message()
-  result.version = 0
+  result.version = 0.MsgVersion
   result.id = message.id
   result.token = message.token
   result.data = data
@@ -82,7 +85,7 @@ proc ack*(message: Message, data: string): Message =
   result.address = message.address
 
 proc messageToBytes(message: Message, buf: var MsgBuffer) =
-  let ver = message.version shl 6
+  let ver = message.version.uint8() shl 6
   let typ = message.mtype.uint8() shl 4
   let tkl = uint8(message.token.string.len())
 
@@ -103,7 +106,7 @@ proc messageFromBytes(buf: var MsgBuffer, address: Address): Message =
 
   let
     verTypeTkl = uint8(buf.readChar())
-    version = verTypeTkl shr 6
+    version = MsgVersion(verTypeTkl shr 6)
 
   result.version = version
   result.mtype = MessageType((0b0011_0000 and verTypeTkl) shr 4)
@@ -145,9 +148,11 @@ proc sendMessages(reactor: Reactor) =
     reactor.socket.sendTo(msg.address.host, msg.address.port, buf.data)
 
     if msg.mtype == MessageType.Con:
-      let nextDelay = reactor.debug.baseBackoff * 2 ^ msg.attempt
-      let jittered  = rand(cast[int](nextDelay.inMilliseconds()))
-      let delay     = min(reactor.debug.maxBackoff, jittered)
+      let
+        nextDelay = reactor.debug.baseBackoff * 2 ^ msg.attempt
+        jittered  = rand(cast[int](nextDelay.inMilliseconds()))
+        delay     = min(reactor.debug.maxBackoff, jittered)
+
       msg.nextSend = now + initDuration(milliseconds = delay)
       msg.attempt += 1
       nextMessages.add(msg)
@@ -288,12 +293,14 @@ type
 when isMainModule:
   echo "Starting reactor"
   let reactor = newReactor("127.0.0.1", 5557)
-  var i = 0
-  var sendNewMessage = true
-  var currentRPC: MsgId
+  var
+    i = 0
+    sendNewMessage = true
 
   while true:
     reactor.tick()
+
+    var currentRPC: MsgId
 
     if sendNewMessage:
       echo "Sending RPC"
