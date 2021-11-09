@@ -79,6 +79,13 @@ proc readStr*(s: MsgBuffer, length: int): string =
     var L = s.readData(addr(result[0]), length)
     if L != length: raise newException(IOError, "string len mismatch")
 
+proc readStrRemaining*(s: MsgBuffer): string =
+  let ln = s.data.len() - s.pos 
+  result = newString(ln)
+  if ln != 0:
+    var rl = s.readData(addr(result[0]), ln)
+    if rl != ln: raise newException(IOError, "string len mismatch")
+
 proc readMsgBuffer*(s: MsgBuffer, length: int): MsgBuffer =
   result = MsgBuffer.init(length)
   if length != 0:

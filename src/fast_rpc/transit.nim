@@ -21,7 +21,8 @@ const
 # Splitting up these type definitions since I want to be able to extract this
 # stuff later.
 type
-  MsgId = uint16
+  MsgId* = distinct uint16
+  MsgToken* = distinct string
 
   Address* = object
     host*: string
@@ -30,32 +31,38 @@ type
   MessageType = enum
     Con, Non, Ack, Rst
 
-  Message = ref object
+  Message* = ref object
     address*: Address
     version*: uint8
     id*: MsgId
     mtype*: MessageType
-    token*: string
+    token*: MsgToken
     data*: string
     acked: bool
     nextSend: MonoTime
     attempt: int
 
-  DebugInfo = object
+  DebugInfo* = object
     maxUdpPacketSize: int
     maxInFlight: int
     maxBackoff: int
     baseBackoff: Duration
 
-  Reactor = ref object
-    id: uint16
+  Reactor* = ref object
+    id*: MsgId
     socket: Socket
     time: float64
     maxInFlight: int
     failedMessages*: seq[Message]
     messages*: seq[Message]
     toSend: seq[Message]
+    queueSize: int
     debug: DebugInfo
+
+proc `==` *(x, y: MsgId): bool {.borrow.}
+proc `==` *(x, y: MsgToken): bool {.borrow.}
+proc `$` *(x: MsgId): string {.borrow.}
+proc `$` *(x: MsgToken): string {.borrow.}
 
 proc initAddress*(host: string, port: Port): Address =
   result.host = host
@@ -77,13 +84,13 @@ proc ack*(message: Message, data: string): Message =
 proc messageToBytes(message: Message, buf: var MsgBuffer) =
   let ver = message.version shl 6
   let typ = message.mtype.uint8() shl 4
-  let tkl = uint8(message.token.len())
+  let tkl = uint8(message.token.string.len())
 
   let verTypeTkl = ver or typ or tkl
   buf.write(verTypeTkl.char)
 
   # Adding the id. Extend the buffer by the correct amount and add the 2 bytes
-  buf.store16(message.id)
+  buf.store16(message.id.uint16)
 
   buf.write(message.token)
 
@@ -102,15 +109,17 @@ proc messageFromBytes(buf: var MsgBuffer, address: Address): Message =
   result.mtype = MessageType((0b0011_0000 and verTypeTkl) shr 4)
 
   let tkl: int = int(0b0000_1111 and verTypeTkl)
+  assert tkl == sizeof(MsgToken)
 
   # Read 2 bytes for the id. These are in little endian so swap them
   # to get the id in network order
-  result.id = buf.unstore16()
+  result.id = MsgId(buf.unstore16())
 
-  result.token = buf.readStr(tkl)
+  # Read Token
+  result.token = MsgToken(buf.readStr(tkl))
 
   if buf.readChar().uint8 == 0xFF:
-    result.data = buf.readMsgBufferRemaining()
+    result.data = buf.readStrRemaining()
 
   result.address = address
 
@@ -151,11 +160,10 @@ proc readMessages(reactor: Reactor) =
     host: string
     port: Port
 
-  # Try to read 1000 messages from the socket. This should probably be configurable
+  # Try to read queueSize messages from the socket. This should probably be configurable
   # Once we're done reading packets, decode them and attempt to match up any acknowledgements
   # with outstanding sends
-  # TODO - Make the message count here configurable
-  for _ in 0 ..< 1000:
+  for _ in 0 ..< reactor.queueSize:
     var byteLen: int
     try:
       byteLen = reactor.socket.recvFrom(
@@ -208,8 +216,8 @@ proc send(reactor: Reactor, message: Message) =
   message.attempt = 1
   reactor.toSend.add(message)
 
-proc getNextId*(reactor: Reactor): uint16 =
-  reactor.id += 1
+proc getNextId*(reactor: Reactor): MsgId =
+  reactor.id.inc()
   return reactor.id
 
 type MessageStatus = enum
@@ -230,19 +238,20 @@ proc messageStatus*(reactor: Reactor, msgId: MsgId): MessageStatus =
   return MessageStatus.Delivered
 
 
-proc genToken(): string =
+proc genToken(reactor: Reactor): MsgToken =
   var token = newString(4)
   let bytes = urandom(4)
   for b in bytes:
     token.add(b.char)
+  result = MsgToken(token)
 
-proc confirm*(reactor: Reactor, host: string, port: int, data: string): uint16 =
+proc confirm*(reactor: Reactor, host: string, port: int, data: string): MsgId =
   let address = initAddress(host, port)
   let message = Message()
   let id = reactor.getNextId()
   message.mtype = MessageType.Con
   message.id = id
-  message.token = genToken()
+  message.token = reactor.genToken()
   message.address = address
   message.data = data
   reactor.send(message)
@@ -262,7 +271,7 @@ proc newReactor*(address: Address): Reactor =
     IPPROTO_UDP,
     buffered = false
   )
-  result.id = 1
+  result.id = 1.MsgId
   result.socket.getFd().setBlocking(false)
   result.socket.bindAddr(address.port, address.host)
   result.maxInFlight = defaultMaxInFlight
@@ -281,7 +290,7 @@ when isMainModule:
   let reactor = newReactor("127.0.0.1", 5557)
   var i = 0
   var sendNewMessage = true
-  var currentRPC: uint16
+  var currentRPC: MsgId
 
   while true:
     reactor.tick()
@@ -298,11 +307,11 @@ when isMainModule:
     case reactor.messageStatus(currentRPC):
       of MessageStatus.Delivered:
         echo "RPC Success ", currentRPC
-        currentRPC = 0
+        currentRPC = 0.MsgId
         sendNewMessage = true
       of MessageStatus.Failed:
         echo "RPC Failed ", currentRPC
-        currentRPC = 0
+        currentRPC = 0.MsgId
         sendNewMessage = true
       of MessageStatus.InFlight:
         discard
@@ -319,6 +328,6 @@ when isMainModule:
       let ack = msg.ack(buf)
       reactor.send(ack)
 
-    i += 1
+    inc(i)
     sleep(100)
 
