@@ -10,7 +10,7 @@ import std/sysrand
 import std/random
 import math
 
-import binutils
+import mcu_utils/msgbuffer
 
 const
   defaultMaxUdpPacketSize = 1500
