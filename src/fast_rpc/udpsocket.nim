@@ -72,11 +72,7 @@ proc initAddress*(host: string, port: int): Address =
   result.port = Port(port)
 
 proc messageToBytes(message: Message, buf: var MsgBuffer) =
-  let mtype: uint8 = case message.mtype:
-    of MessageType.Con: 0
-    of MessageType.Non: 1
-    of MessageType.Ack: 2
-    of MessageType.Rst: 3
+  let mtype = uint8(ord(message.mtype))
 
   let ver = message.version shl 6
   let typ = mtype shl 4
@@ -85,8 +81,7 @@ proc messageToBytes(message: Message, buf: var MsgBuffer) =
   let verTypeTkl = ver or typ or tkl
   buf.write(char(verTypeTkl))
 
-  # Adding the id. Cast each byte of the id into 2 and then add them to the buffer
-  # in big endian form
+  # Adding the id - in big endian form
   buf.writeUint16(message.id)
   buf.write(message.token)
 
