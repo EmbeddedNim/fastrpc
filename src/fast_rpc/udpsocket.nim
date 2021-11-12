@@ -10,9 +10,12 @@ import std/sysrand
 import std/random
 import math
 
+import mcu_utils/msgbuffer
+
 import json
 import msgpack4nim
 import msgpack4nim/msgpack2json
+
 
 const
   defaultMaxUdpPacketSize = 1500
@@ -68,7 +71,7 @@ proc initAddress*(host: string, port: int): Address =
   result.host = host
   result.port = Port(port)
 
-proc messageToBytes(message: Message, buf: var string) =
+proc messageToBytes(message: Message, buf: var MsgBuffer) =
   let mtype: uint8 = case message.mtype:
     of MessageType.Con: 0
     of MessageType.Non: 1
@@ -80,7 +83,7 @@ proc messageToBytes(message: Message, buf: var string) =
   let tkl = cast[uint8](message.token.len)
 
   let verTypeTkl = ver or typ or tkl
-  buf.add(verTypeTkl.char)
+  buf.write(verTypeTkl.char)
 
   # Adding the id. Cast each byte of the id into 2 and then add them to the buffer
   # in big endian form
@@ -88,19 +91,22 @@ proc messageToBytes(message: Message, buf: var string) =
   bytes[0] = cast[uint8](message.id shr 8)
   bytes[1] = cast[uint8](message.id and 0xFF)
 
-  for byte in bytes:
-    buf.add(byte.char)
+  buf.writeUint16(message.id)
+  # for byte in bytes:
+    # buf.add(byte.char)
 
-  buf.add(message.token)
+  buf.write(message.token)
 
   if message.data != "":
-    buf.add(0xFF.char)
-    buf.add(message.data)
+    buf.write(0xFF.char)
+    buf.write(message.data)
 
-proc messageFromBytes(buf: string, address: Address): Message =
+proc messageFromBytes(buf: MsgBuffer, address: Address): Message =
   result = Message()
   var idx = 0
-  let verTypeTkl = cast[uint8](buf[idx])
+  # let verTypeTkl = cast[uint8](buf[idx])
+  buf.setPosition(0)
+  let verTypeTkl = buf.readUint8()
   let version = verTypeTkl shr 6
   result.version = version
   result.mtype = case ((0b00110000 and verTypeTkl) shr 4):
@@ -111,20 +117,18 @@ proc messageFromBytes(buf: string, address: Address): Message =
     else:
       raise
   let tkl: int = cast[int](0b00001111 and verTypeTkl)
-  idx += 1
 
   # Read 2 bytes for the id. These are in little endian so swap them
   # to get the id in network order
-  let id = cast[ptr uint16](buf[idx].unsafeAddr)[]
-  let tmp = cast[array[2, uint8]](id)
-  result.id = (tmp[0].uint16 shl 8) or tmp[1].uint16
-  idx += 2
+  let id = buf.readUint16()
 
-  result.token = buf[idx ..< idx+tkl]
-  idx += tkl
+  # result.token = buf[idx ..< idx+tkl]
+  result.token = buf.readStr(tkl)
 
-  if cast[int](buf[idx]) == 0xFF:
-    result.data = buf[idx+1 ..< buf.len]
+  # if cast[int](buf[idx]) == 0xFF:
+    # result.data = buf[idx+1 ..< buf.len]
+  if buf.peekChar().uint8 == 0xFF:
+    result.data = buf.readStrRemaining()
 
   result.address = address
 
@@ -145,9 +149,9 @@ proc sendMessages(reactor: Reactor) =
       reactor.failedMessages.add(msg)
       continue
 
-    var buf = newStringOfCap(reactor.debug.maxUdpPacketSize)
+    var buf = MsgBuffer.init(reactor.debug.maxUdpPacketSize)
     messageToBytes(msg, buf)
-    reactor.socket.sendTo(msg.address.host, msg.address.port, buf)
+    reactor.socket.sendTo(msg.address.host, msg.address.port, addr buf.data[0], buf.pos)
 
     if msg.mtype == MessageType.Con:
       let nextDelay = reactor.debug.baseBackoff * 2 ^ msg.attempt
@@ -161,7 +165,7 @@ proc sendMessages(reactor: Reactor) =
 
 proc readMessages(reactor: Reactor) =
   var
-    buf = newStringOfCap(reactor.debug.maxUdpPacketSize)
+    buf = MsgBuffer.init(reactor.debug.maxUdpPacketSize)
     host: string
     port: Port
 
@@ -173,12 +177,11 @@ proc readMessages(reactor: Reactor) =
     var byteLen: int
     try:
       byteLen = reactor.socket.recvFrom(
-        buf,
+        buf.data,
         reactor.debug.maxUdpPacketSize,
         host,
         port
       )
-      echo "RECV_FROM: ", byteLen
     except:
       # TODO - WE need to throw a real error here probably. An error indicates
       # something has gone wrong with the socket
