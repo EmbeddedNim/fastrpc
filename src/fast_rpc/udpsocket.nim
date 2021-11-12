@@ -80,21 +80,14 @@ proc messageToBytes(message: Message, buf: var MsgBuffer) =
 
   let ver = message.version shl 6
   let typ = mtype shl 4
-  let tkl = cast[uint8](message.token.len)
+  let tkl = uint8(message.token.len())
 
   let verTypeTkl = ver or typ or tkl
-  buf.write(verTypeTkl.char)
+  buf.write(char(verTypeTkl))
 
   # Adding the id. Cast each byte of the id into 2 and then add them to the buffer
   # in big endian form
-  var bytes: array[2, uint8]
-  bytes[0] = cast[uint8](message.id shr 8)
-  bytes[1] = cast[uint8](message.id and 0xFF)
-
   buf.writeUint16(message.id)
-  # for byte in bytes:
-    # buf.add(byte.char)
-
   buf.write(message.token)
 
   if message.data != "":
