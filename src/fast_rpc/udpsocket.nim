@@ -127,7 +127,7 @@ proc messageFromBytes(buf: MsgBuffer, address: Address): Message =
 
   # if cast[int](buf[idx]) == 0xFF:
     # result.data = buf[idx+1 ..< buf.len]
-  if buf.peekChar().uint8 == 0xFF:
+  if buf.readChar().uint8 == 0xFF:
     result.data = buf.readStrRemaining()
 
   result.address = address
@@ -374,16 +374,18 @@ when isMainModule:
     while true:
       reactor.tick()
 
-      let telemetry = pack(123)
-      discard reactor.nonconfirm("127.0.0.1", 5557, telemetry)
+      # let telemetry = pack(123)
+      # discard reactor.nonconfirm("127.0.0.1", 5557, telemetry)
 
 
       for msg in reactor.messages:
-        echo "Got a new message", msg.id, " ", msg.data.len(), " ", msg.mtype
+        echo "Got a new message: ", "id: ", msg.id, " len: ", msg.data.len(), " mtype: ", msg.mtype
 
         var s = MsgStream.init(msg.data)
+        s.setPosition(0)
 
         var rpc = s.toJsonNode()
+        echo "RPC: repr data: ", repr msg.data
         echo "RPC: ", $rpc
 
         var buf = pack(123)
