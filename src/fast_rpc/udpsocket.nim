@@ -310,7 +310,7 @@ when isMainModule:
         sendNewMessage = false
         let rpc: RPC = ("yo", @[])
         let bin = pack(rpc)
-        currentRPC = reactor.confirm("127.0.0.1", 6555, bin)
+        currentRPC = reactor.confirm("127.0.0.1", 5555, bin)
         echo "RPC ID ", currentRPC
 
       case reactor.messageStatus(currentRPC):
@@ -326,12 +326,13 @@ when isMainModule:
           discard
 
       for msg in reactor.messages:
-        echo "Got a new message", msg.id, " ", msg.data, " ", msg.mtype
+        echo "Got a new message", msg.id, " ", msg.data.len(), " ", msg.mtype
 
-        var s = MsgStream.init(msg.data)
-        var rpc: RPC
-        s.unpack(rpc)
         echo "RPC: ", rpc
+        var s = MsgStream.init(msg.data)
+        var rpc = s.toJsonNode()
+        echo "RPC: ", $rpc
+
 
         var buf = pack(123)
         let ack = msg.ack(buf)

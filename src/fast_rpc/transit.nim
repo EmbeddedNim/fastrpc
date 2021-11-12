@@ -373,26 +373,6 @@ when isMainModule:
       let telemetry = pack(123)
       discard reactor.nonconfirm("127.0.0.1", 5557, telemetry)
 
-      if sendNewMessage:
-        echo "Sending RPC"
-
-        sendNewMessage = false
-        let rpc: RPC = ("yo", @[])
-        let bin = pack(rpc)
-        currentRPC = reactor.confirm("127.0.0.1", 5557, bin)
-        echo "RPC ID ", currentRPC
-
-      case reactor.messageStatus(currentRPC):
-        of MessageStatus.Delivered:
-          echo "RPC Success ", currentRPC
-          currentRPC = 0
-          sendNewMessage = true
-        of MessageStatus.Failed:
-          echo "RPC Failed ", currentRPC
-          currentRPC = 0
-          sendNewMessage = true
-        of MessageStatus.InFlight:
-          discard
 
       for msg in reactor.messages:
         echo "Got a new message", msg.id, " ", msg.data.len(), " ", msg.mtype
