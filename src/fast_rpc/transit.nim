@@ -178,6 +178,7 @@ proc readMessages(reactor: Reactor) =
         host,
         port
       )
+      echo "RECV_FROM: ", byteLen
     except:
       # TODO - WE need to throw a real error here probably. An error indicates
       # something has gone wrong with the socket
