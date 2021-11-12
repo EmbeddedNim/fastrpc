@@ -5,11 +5,11 @@ import std/monotimes
 import std/times
 import nativesockets
 import os
-import msgpack4nim
 import std/sysrand
 import std/random
 import math
 
+import msgpack4nim
 import mcu_utils/msgbuffer
 
 const
@@ -52,7 +52,7 @@ type
   Reactor* = ref object
     id*: MsgId
     socket: Socket
-    time: float64
+    time: MonoTime
     maxInFlight: int
     failedMessages*: seq[Message]
     messages*: seq[Message]
@@ -93,7 +93,7 @@ proc messageToBytes(message: Message, buf: var MsgBuffer) =
   buf.write(verTypeTkl.char)
 
   # Adding the id. Extend the buffer by the correct amount and add the 2 bytes
-  buf.store16(message.id.uint16)
+  buf.writeUint16(message.id.uint16)
 
   buf.write(message.token)
 
@@ -116,7 +116,7 @@ proc messageFromBytes(buf: var MsgBuffer, address: Address): Message =
 
   # Read 2 bytes for the id. These are in little endian so swap them
   # to get the id in network order
-  result.id = MsgId(buf.unstore16())
+  result.id = MsgId(buf.readUint16())
 
   # Read Token
   result.token = MsgToken(buf.readStr(tkl))
@@ -291,50 +291,75 @@ type
     params: seq[string]
 
 when isMainModule:
-  echo "Starting reactor"
-  let reactor = newReactor("127.0.0.1", 5557)
-  var
-    i = 0
-    sendNewMessage = true
+  when defined(UdpServer):
+    echo "Starting reactor"
+    let reactor = newReactor("127.0.0.1", 5557)
+    var
+      i = 0
+      sendNewMessage = true
 
-  while true:
-    reactor.tick()
+    while true:
+      reactor.tick()
 
-    var currentRPC: MsgId
+      var currentRPC: MsgId
 
-    if sendNewMessage:
-      echo "Sending RPC"
+      if sendNewMessage:
+        echo "Sending RPC"
 
-      sendNewMessage = false
-      let rpc: RPC = ("yo", @[])
-      let bin = pack(rpc)
-      currentRPC = reactor.confirm("127.0.0.1", 5555, bin)
-      echo "RPC ID ", currentRPC
+        sendNewMessage = false
+        let rpc: RPC = ("yo", @[])
+        let bin = pack(rpc)
+        currentRPC = reactor.confirm("127.0.0.1", 5555, bin)
+        echo "RPC ID ", currentRPC
 
-    case reactor.messageStatus(currentRPC):
-      of MessageStatus.Delivered:
-        echo "RPC Success ", currentRPC
-        currentRPC = 0.MsgId
-        sendNewMessage = true
-      of MessageStatus.Failed:
-        echo "RPC Failed ", currentRPC
-        currentRPC = 0.MsgId
-        sendNewMessage = true
-      of MessageStatus.InFlight:
-        discard
+      case reactor.messageStatus(currentRPC):
+        of MessageStatus.Delivered:
+          echo "RPC Success ", currentRPC
+          currentRPC = 0.MsgId
+          sendNewMessage = true
+        of MessageStatus.Failed:
+          echo "RPC Failed ", currentRPC
+          currentRPC = 0.MsgId
+          sendNewMessage = true
+        of MessageStatus.InFlight:
+          discard
 
-    for msg in reactor.messages:
-      echo "Got a new message", msg.id, " ", msg.data, " ", msg.mtype
+      for msg in reactor.messages:
+        echo "Got a new message", msg.id, " ", msg.data, " ", msg.mtype
 
-      var s = MsgStream.init(msg.data)
-      var rpc: RPC
-      s.unpack(rpc)
-      echo "RPC: ", rpc
+        var s = MsgStream.init(msg.data)
+        var rpc: RPC
+        s.unpack(rpc)
+        echo "RPC: ", rpc
 
-      var buf = pack(123)
-      let ack = msg.ack(buf)
-      reactor.send(ack)
+        var buf = pack(123)
+        let ack = msg.ack(buf)
+        reactor.send(ack)
 
-    inc(i)
-    sleep(100)
+      inc(i)
+      sleep(100)
+  elif defined(UdpClient):
+    echo "Starting reactor"
+    let reactor = newReactor("127.0.0.1", 5555)
+    var
+      i = 0
+      sendNewMessage = true
+
+    while true:
+      reactor.tick()
+
+      for msg in reactor.messages:
+        echo "Got a new message", msg.id, " ", msg.data, " ", msg.mtype
+
+        var s = MsgStream.init(msg.data)
+        var rpc: RPC
+        s.unpack(rpc)
+        echo "RPC: ", rpc
+
+        var buf = pack(123)
+        let ack = msg.ack(buf)
+        reactor.send(ack)
+
+      inc(i)
+      sleep(100)
 

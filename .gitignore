@@ -3,3 +3,4 @@ nimblecache/
 htmldocs/
 nimcache*
 src/fast_rpc/tcpsocket
+src/fast_rpc/udpsocket
