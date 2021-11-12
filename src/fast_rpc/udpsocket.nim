@@ -103,20 +103,12 @@ proc messageToBytes(message: Message, buf: var MsgBuffer) =
 
 proc messageFromBytes(buf: MsgBuffer, address: Address): Message =
   result = Message()
-  var idx = 0
   # let verTypeTkl = cast[uint8](buf[idx])
   buf.setPosition(0)
   let verTypeTkl = buf.readUint8()
-  let version = verTypeTkl shr 6
-  result.version = version
-  result.mtype = case ((0b00110000 and verTypeTkl) shr 4):
-    of 0: MessageType.Con
-    of 1: MessageType.Non
-    of 2: MessageType.Ack
-    of 3: MessageType.Rst
-    else:
-      raise
-  let tkl: int = cast[int](0b00001111 and verTypeTkl)
+  result.version = verTypeTkl shr 6
+  result.mtype = MessageType((0b00110000 and verTypeTkl) shr 4)
+  let tkl = int(0b00001111 and verTypeTkl)
 
   # Read 2 bytes for the id. These are in little endian so swap them
   # to get the id in network order
