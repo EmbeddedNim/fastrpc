@@ -120,13 +120,10 @@ proc messageFromBytes(buf: MsgBuffer, address: Address): Message =
 
   # Read 2 bytes for the id. These are in little endian so swap them
   # to get the id in network order
-  let id = buf.readUint16()
+  result.id = buf.readUint16()
 
-  # result.token = buf[idx ..< idx+tkl]
   result.token = buf.readStr(tkl)
 
-  # if cast[int](buf[idx]) == 0xFF:
-    # result.data = buf[idx+1 ..< buf.len]
   if buf.readChar().uint8 == 0xFF:
     result.data = buf.readStrRemaining()
 
