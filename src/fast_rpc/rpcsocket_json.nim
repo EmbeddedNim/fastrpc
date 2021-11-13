@@ -25,14 +25,14 @@ proc rpcMsgPackReadHandler*(srv: TcpServerInfo[RpcRouter], result: ReadyKey, sou
     var rcall: JsonNode
 
     block rxblock:
-      logi("rpc server handler: router: %x", rt.buffer)
+      logInfo("rpc server handler: router: %x", rt.buffer)
 
       let rx = sourceClient.recv(rt.buffer, -1)
       let msg = rx & "\n"
-      logi("rpc recv done")
+      logInfo("rpc recv done")
 
       if msg.len() == 0:
-        logi("msg too short")
+        logInfo("msg too short")
         raise newException(TcpClientDisconnected, "")
       else:
         echo("parse json: msgl: %d", msg.len())
@@ -58,7 +58,7 @@ proc rpcMsgPackReadHandler*(srv: TcpServerInfo[RpcRouter], result: ReadyKey, sou
     echo("control server: error: socket timeout: ", $sourceClient.getFd().int)
 
 proc startRpcSocketServer*(port: Port; router: var RpcRouter) =
-  logi("starting json rpc server: buffer: %d", router.buffer)
+  logInfo("starting json rpc server: buffer: %d", router.buffer)
 
   startSocketServer[RpcRouter](
     port,

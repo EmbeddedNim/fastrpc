@@ -2,6 +2,7 @@ import net, selectors, tables, posix
 
 import json
 import msgpack4nim/msgpack2json
+import mcu_utils/logging
 
 import tcpsocket
 
@@ -15,10 +16,10 @@ proc rpcMsgPackReadHandler*(srv: TcpServerInfo[RpcRouter], result: ReadyKey, sou
   # RPC calls with possibly larger responses. 
 
   try:
-    logd("rpc server handler: router: %x", rt.buffer)
+    logDebug("rpc server handler: router: %x", rt.buffer)
 
     var rcall: JsonNode
-    var tu0: uint64 = 0
+    var tu0 = Micros(0)
 
     block rxmsg:
       var msg = sourceClient.recv(rt.buffer, -1)
@@ -28,21 +29,21 @@ proc rpcMsgPackReadHandler*(srv: TcpServerInfo[RpcRouter], result: ReadyKey, sou
       if msg.len() == 0:
         raise newException(TcpClientDisconnected, "")
       else:
-        logd("data from client: ", $(sourceClient.getFd().int))
-        logd("data from client:l: ", msg.len())
+        logDebug("data from client: ", $(sourceClient.getFd().int))
+        logDebug("data from client:l: ", msg.len())
         rcall = msgpack2json.toJsonNode(msg)
-        logd("done parsing mpack ")
+        logDebug("done parsing mpack ")
 
     var res: JsonNode
     block pres:
-        logd("route rpc message: ", )
-        logd("method: ", $rcall["method"])
-        logd("route rpc route: ", )
+        logDebug("route rpc message: ", )
+        logDebug("method: ", $rcall["method"])
+        logDebug("route rpc route: ", )
         res = rt.route(rcall)
 
     var rmsg: string
     block prmsg:
-        logd("call ran", )
+        logDebug("call ran", )
         rmsg = msgpack2json.fromJsonNode(move res)
     
     let tu3 = micros()
@@ -51,17 +52,17 @@ proc rpcMsgPackReadHandler*(srv: TcpServerInfo[RpcRouter], result: ReadyKey, sou
 
     block txres:
 
-        logd("rmsg len: ", rmsg.len())
-        logd("sending len to client: ", $(sourceClient.getFd().int))
+        logDebug("rmsg len: ", rmsg.len())
+        logDebug("sending len to client: ", $(sourceClient.getFd().int))
         sourceClient.sendLength(rmsg)
-        logd("sending data to client: ", $(sourceClient.getFd().int))
+        logDebug("sending data to client: ", $(sourceClient.getFd().int))
         sourceClient.sendChunks(rmsg)
 
   except TimeoutError:
     echo("control server: error: socket timeout: ", $sourceClient.getFd().int)
 
 proc startRpcSocketServer*(port: Port; router: var RpcRouter) =
-  logi("starting mpack rpc server: buffer: %s", $router.buffer)
+  logInfo("starting mpack rpc server: buffer: %s", $router.buffer)
 
   startSocketServer[RpcRouter](
     port=port,

@@ -114,12 +114,12 @@ proc messageFromBytes(buf: MsgBuffer, address: Address): Message =
 
 proc sendMessages(reactor: Reactor) =
   var nextMessages: seq[Message]
-  let now = getMonoTime()
+  let ts = getMonoTime()
 
   for msg in reactor.toSend:
     # If we're not ready to send this mesage just stash it away and continue
     # to the next
-    if msg.nextSend > now:
+    if msg.nextSend > ts:
       nextMessages.add(msg)
       continue
 
@@ -137,7 +137,7 @@ proc sendMessages(reactor: Reactor) =
       let nextDelay = reactor.debug.baseBackoff * 2 ^ msg.attempt
       let jittered  = rand(cast[int](nextDelay.inMilliseconds()))
       let delay     = min(reactor.debug.maxBackoff, jittered)
-      msg.nextSend = now + initDuration(milliseconds = delay)
+      msg.nextSend = ts + initDuration(milliseconds = delay)
       msg.attempt += 1
       nextMessages.add(msg)
 
