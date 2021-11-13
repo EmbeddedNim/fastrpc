@@ -194,7 +194,7 @@ proc tick*(reactor: Reactor) =
   reactor.sendMessages()
   reactor.readMessages()
 
-proc send(reactor: Reactor, message: Message) =
+proc send*(reactor: Reactor, message: Message) =
   # TODO - Return a proper error here so the user knows that they were dropped because our buffer is full
   if reactor.toSend.len >= reactor.debug.maxInFlight:
     return
@@ -223,9 +223,8 @@ proc messageStatus*(reactor: Reactor, msgId: MsgId): MessageStatus =
 
 proc genToken(): string =
   var token = newString(4)
-  let bytes = urandom(4)
-  for b in bytes:
-    token.add(b.char)
+  let bytes = rand(int32.high).int32
+  token.addInt(bytes)
 
 proc ack*(message: Message, data: string): Message =
   result = Message()
@@ -284,8 +283,10 @@ proc newReactor*(address: Address): Reactor =
   result.socket.bindAddr(address.port, address.host)
   result.debug = debugInfo
 
+  randomize()
+
 proc newReactor*(host: string, port: int): Reactor =
-  newReactor(initAddress(host, port))
+  result = newReactor(initAddress(host, port))
 
 # Putting this here for now since its not attached to the underlying transport
 # layer and I want to keep this isolated.
@@ -302,14 +303,14 @@ when isMainModule:
       currentRPC: uint16 = 0
 
     logDebug "Starting reactor"
-    let reactor = newReactor("127.0.0.1", 5557)
+    let reactor = newReactor("10.0.7.0", 5557)
 
     while true:
       reactor.tick()
 
       logDebug "send telemetry: "
       let telemetry = pack(123)
-      discard reactor.nonconfirm("127.0.0.1", 5555, telemetry)
+      discard reactor.nonconfirm("10.0.7.8", 5555, telemetry)
 
       if sendNewMessage:
         logDebug "Sending RPC"
@@ -317,7 +318,7 @@ when isMainModule:
         sendNewMessage = false
         let rpc: RPC = ("yo", @[])
         let bin = pack(rpc)
-        currentRPC = reactor.confirm("127.0.0.1", 5555, bin)
+        currentRPC = reactor.confirm("10.0.7.8", 5555, bin)
         logDebug "RPC ID ", currentRPC
 
       case reactor.messageStatus(currentRPC):
