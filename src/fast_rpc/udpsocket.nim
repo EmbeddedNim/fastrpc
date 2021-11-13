@@ -10,6 +10,7 @@ import std/sysrand
 import std/random
 import math
 
+import mcu_utils/logging
 import mcu_utils/msgbuffer
 
 import json
@@ -151,7 +152,6 @@ proc readMessages(reactor: Reactor) =
   # Try to read 1000 messages from the socket. This should probably be configurable
   # Once we're done reading packets, decode them and attempt to match up any acknowledgements
   # with outstanding sends
-  # TODO - Make the message count here configurable
   for _ in 0 ..< reactor.debug.maxIncomingReads:
     var byteLen: int
     try:
@@ -162,7 +162,7 @@ proc readMessages(reactor: Reactor) =
         port
       )
     except OSError as e:
-      # echo "socket os error: ", $getCurrentExceptionMsg()
+      # logDebug "socket os error: ", $getCurrentExceptionMsg()
       if e.errorCode == EAGAIN:
         break
       else:
@@ -301,42 +301,43 @@ when isMainModule:
       sendNewMessage = true
       currentRPC: uint16 = 0
 
-    echo "Starting reactor"
+    logDebug "Starting reactor"
     let reactor = newReactor("127.0.0.1", 5557)
 
     while true:
       reactor.tick()
 
+      logDebug "send telemetry: "
       let telemetry = pack(123)
       discard reactor.nonconfirm("127.0.0.1", 5555, telemetry)
 
       if sendNewMessage:
-        echo "Sending RPC"
+        logDebug "Sending RPC"
 
         sendNewMessage = false
         let rpc: RPC = ("yo", @[])
         let bin = pack(rpc)
         currentRPC = reactor.confirm("127.0.0.1", 5555, bin)
-        echo "RPC ID ", currentRPC
+        logDebug "RPC ID ", currentRPC
 
       case reactor.messageStatus(currentRPC):
         of MessageStatus.Delivered:
-          echo "RPC Success ", currentRPC
+          logDebug "RPC Success ", currentRPC
           currentRPC = 0
           sendNewMessage = true
         of MessageStatus.Failed:
-          echo "RPC Failed ", currentRPC
+          logDebug "RPC Failed ", currentRPC
           currentRPC = 0
           sendNewMessage = true
         of MessageStatus.InFlight:
           discard
 
       for msg in reactor.messages:
-        echo "Got a new message", msg.id, " ", msg.data.len(), " ", msg.mtype
+        logDebug "Got a new message:", "id:", msg.id, "len:", msg.data.len(), "mtype:", msg.mtype
 
         var s = MsgStream.init(msg.data)
         var rpc = s.toJsonNode()
-        echo "RPC: ", $rpc
+        logDebug "RPC: ", $rpc
 
         var buf = pack(123)
         let ack = msg.ack(buf)
@@ -351,25 +352,25 @@ when isMainModule:
       sendNewMessage = false
       currentRPC: uint16 = 0
 
-    echo "Starting reactor"
+    logDebug "Starting reactor"
     let reactor = newReactor("127.0.0.1", 5555)
 
     while true:
       reactor.tick()
 
-      # let telemetry = pack(123)
-      # discard reactor.nonconfirm("127.0.0.1", 5557, telemetry)
-
+      logDebug "send telemetry: "
+      let telemetry = pack(123)
+      reactor.nonconfirm("127.0.0.1", 5557, telemetry)
 
       for msg in reactor.messages:
-        echo "Got a new message: ", "id: ", msg.id, " len: ", msg.data.len(), " mtype: ", msg.mtype
+        logDebug "Got a new message:", "id:", msg.id, "len:", msg.data.len(), "mtype:", msg.mtype
 
         var s = MsgStream.init(msg.data)
         s.setPosition(0)
 
         var rpc = s.toJsonNode()
-        echo "RPC: repr data: ", repr msg.data
-        echo "RPC: ", $rpc
+        logDebug "RPC: repr data:", repr msg.data
+        logDebug "RPC:", $rpc
 
         var buf = pack(123)
         let ack = msg.ack(buf)
