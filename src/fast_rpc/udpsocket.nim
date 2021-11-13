@@ -249,7 +249,7 @@ proc confirm*(reactor: Reactor, host: string, port: int, data: string): uint16 =
   let address = initAddress(host, port)
   confirm(reactor, address, data)
 
-proc nonconfirm*(reactor: Reactor, address: Address, data: string): uint16 =
+proc nonconfirm*(reactor: Reactor, address: Address, data: string): uint16 {.discardable.} =
   let message     = Message()
   let id          = reactor.getNextId()
   message.mtype   = MessageType.Non
@@ -295,88 +295,97 @@ type
     m: string
     params: seq[string]
 
-when isMainModule:
-  when defined(UdpServer):
-    var
-      i = 0
-      sendNewMessage = true
-      currentRPC: uint16 = 0
+proc runTestServer*(serverIp, clientIp: string) =
+  var
+    i = 0
+    sendNewMessage = true
+    currentRPC: uint16 = 0
 
-    logDebug "Starting reactor"
-    let reactor = newReactor("10.0.7.0", 5557)
+  logDebug "Starting reactor", "server(me):", serverIp, "client:", clientIp
+  let reactor = newReactor(serverIp, 5557)
 
-    while true:
-      reactor.tick()
+  while true:
+    reactor.tick()
 
-      logDebug "send telemetry: "
-      let telemetry = pack(123)
-      discard reactor.nonconfirm("10.0.7.8", 5555, telemetry)
+    logDebug "send telemetry: "
+    let telemetry = pack(123)
+    discard reactor.nonconfirm(clientIp, 5555, telemetry)
 
-      if sendNewMessage:
-        logDebug "Sending RPC"
+    if sendNewMessage:
+      logDebug "Sending RPC"
 
-        sendNewMessage = false
-        let rpc: RPC = ("yo", @[])
-        let bin = pack(rpc)
-        currentRPC = reactor.confirm("10.0.7.8", 5555, bin)
-        logDebug "RPC ID ", currentRPC
-
-      case reactor.messageStatus(currentRPC):
-        of MessageStatus.Delivered:
-          logDebug "RPC Success ", currentRPC
-          currentRPC = 0
-          sendNewMessage = true
-        of MessageStatus.Failed:
-          logDebug "RPC Failed ", currentRPC
-          currentRPC = 0
-          sendNewMessage = true
-        of MessageStatus.InFlight:
-          discard
-
-      for msg in reactor.messages:
-        logDebug "Got a new message:", "id:", msg.id, "len:", msg.data.len(), "mtype:", msg.mtype
-
-        var s = MsgStream.init(msg.data)
-        var rpc = s.toJsonNode()
-        logDebug "RPC: ", $rpc
-
-        var buf = pack(123)
-        let ack = msg.ack(buf)
-        reactor.send(ack)
-
-      i += 1
-      sleep(1000)
-
-  elif defined(UdpClient):
-    var
-      i = 0
       sendNewMessage = false
-      currentRPC: uint16 = 0
+      let rpc: RPC = ("yo", @[])
+      let bin = pack(rpc)
+      currentRPC = reactor.confirm(clientIp, 5555, bin)
+      logDebug "RPC ID ", currentRPC
 
-    logDebug "Starting reactor"
-    let reactor = newReactor("127.0.0.1", 5555)
+    case reactor.messageStatus(currentRPC):
+      of MessageStatus.Delivered:
+        logDebug "RPC Success ", currentRPC
+        currentRPC = 0
+        sendNewMessage = true
+      of MessageStatus.Failed:
+        logDebug "RPC Failed ", currentRPC
+        currentRPC = 0
+        sendNewMessage = true
+      of MessageStatus.InFlight:
+        discard
 
-    while true:
-      reactor.tick()
+    for msg in reactor.messages:
+      logDebug "Got a new message:", "id:", msg.id, "len:", msg.data.len(), "mtype:", msg.mtype
 
-      logDebug "send telemetry: "
-      let telemetry = pack(123)
-      reactor.nonconfirm("127.0.0.1", 5557, telemetry)
+      var s = MsgStream.init(msg.data)
+      var rpc = s.toJsonNode()
+      logDebug "RPC: ", $rpc
 
-      for msg in reactor.messages:
-        logDebug "Got a new message:", "id:", msg.id, "len:", msg.data.len(), "mtype:", msg.mtype
+      var buf = pack(123)
+      let ack = msg.ack(buf)
+      reactor.send(ack)
 
-        var s = MsgStream.init(msg.data)
-        s.setPosition(0)
+    i.inc()
+    sleep(1000)
 
-        var rpc = s.toJsonNode()
-        logDebug "RPC: repr data:", repr msg.data
-        logDebug "RPC:", $rpc
+proc runTestClient*(serverIp, clientIp: string) =
+  var
+    i = 0
+    sendNewMessage = false
+    currentRPC: uint16 = 0
 
-        var buf = pack(123)
-        let ack = msg.ack(buf)
-        reactor.send(ack)
+  logDebug "Starting reactor", "client(me):", clientIp, "server:", serverIp
+  let reactor = newReactor(clientIp, 5555)
 
-      i += 1
-      sleep(1000)
+  while true:
+    reactor.tick()
 
+    logDebug "send telemetry: "
+    let telemetry = pack(123)
+    discard reactor.nonconfirm(serverIp, 5557, telemetry)
+
+    for msg in reactor.messages:
+      logDebug "Got a new message:", "id:", msg.id, "len:", msg.data.len(), "mtype:", msg.mtype
+
+      var s = MsgStream.init(msg.data)
+      s.setPosition(0)
+
+      var rpc = s.toJsonNode()
+      logDebug "RPC: repr data:", repr msg.data
+      logDebug "RPC:", $rpc
+
+      var buf = pack(123)
+      let ack = msg.ack(buf)
+      reactor.send(ack)
+
+    i.inc()
+    sleep(1000)
+
+
+when isMainModule:
+  const serverIp {.strdefine.} = "127.0.0.1"
+  const clientIp {.strdefine.} = "127.0.0.1"
+  when defined(UdpServer):
+    runTestServer(serverIp, clientIp)
+  elif defined(UdpClient):
+    runTestServer(serverIp, clientIp)
+  else:
+    {.fatal: "use -d:UdpServer or -d:UdpClient".}
