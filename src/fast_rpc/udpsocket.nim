@@ -18,6 +18,7 @@ import msgpack4nim/msgpack2json
 
 
 const
+  defaultMaxIncomingReads = 10
   defaultMaxUdpPacketSize = 1500
   defaultMaxInFlight = 2000 # Arbitrary number of packets in flight that we'll allow
   defaultMaxBackoff = 5_000
@@ -50,6 +51,7 @@ type
     attempt: int
 
   DebugInfo = object
+    maxIncomingReads: int
     maxUdpPacketSize: int
     maxInFlight: int
     maxBackoff: int
@@ -150,7 +152,7 @@ proc readMessages(reactor: Reactor) =
   # Once we're done reading packets, decode them and attempt to match up any acknowledgements
   # with outstanding sends
   # TODO - Make the message count here configurable
-  for _ in 0 ..< 1000:
+  for _ in 0 ..< reactor.debug.maxIncomingReads:
     var byteLen: int
     try:
       byteLen = reactor.socket.recvFrom(
@@ -159,10 +161,13 @@ proc readMessages(reactor: Reactor) =
         host,
         port
       )
-    except:
-      # TODO - WE need to throw a real error here probably. An error indicates
-      # something has gone wrong with the socket
-      break
+    except OSError as e:
+      # echo "socket os error: ", $getCurrentExceptionMsg()
+      if e.errorCode == EAGAIN:
+        break
+      else:
+        raise e
+
     let address = initAddress(host, port)
     let message = messageFromBytes(buf, address)
 
@@ -261,6 +266,7 @@ proc nonconfirm*(reactor: Reactor, host: string, port: int, data: string): uint1
 
 proc newReactor*(address: Address): Reactor =
   let debugInfo = DebugInfo(
+    maxIncomingReads: defaultMaxIncomingReads,
     maxUdpPacketSize: defaultMaxUdpPacketSize,
     maxInFlight: defaultMaxInFlight,
     maxBackoff: defaultMaxBackoff,
