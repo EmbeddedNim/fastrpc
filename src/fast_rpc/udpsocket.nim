@@ -295,21 +295,21 @@ type
     m: string
     params: seq[string]
 
-proc runTestServer*(serverIp, clientIp: string) =
+proc runTestServer*(serverIp, clientIp: string, port: int) =
   var
     i = 0
     sendNewMessage = true
     currentRPC: uint16 = 0
 
   logDebug "Starting reactor", "server(me):", serverIp, "client:", clientIp
-  let reactor = newReactor(serverIp, 5557)
+  let reactor = newReactor(serverIp, port)
 
   while true:
     reactor.tick()
 
     logDebug "send telemetry: "
     let telemetry = pack(123)
-    discard reactor.nonconfirm(clientIp, 5555, telemetry)
+    discard reactor.nonconfirm(clientIp, port, telemetry)
 
     if sendNewMessage:
       logDebug "Sending RPC"
@@ -317,7 +317,7 @@ proc runTestServer*(serverIp, clientIp: string) =
       sendNewMessage = false
       let rpc: RPC = ("yo", @[])
       let bin = pack(rpc)
-      currentRPC = reactor.confirm(clientIp, 5555, bin)
+      currentRPC = reactor.confirm(clientIp, port, bin)
       logDebug "RPC ID ", currentRPC
 
     case reactor.messageStatus(currentRPC):
@@ -346,21 +346,21 @@ proc runTestServer*(serverIp, clientIp: string) =
     i.inc()
     sleep(1000)
 
-proc runTestClient*(serverIp, clientIp: string) =
+proc runTestClient*(serverIp, clientIp: string, port: int) =
   var
     i = 0
     sendNewMessage = false
     currentRPC: uint16 = 0
 
   logDebug "Starting reactor", "client(me):", clientIp, "server:", serverIp
-  let reactor = newReactor(clientIp, 5555)
+  let reactor = newReactor(clientIp, port)
 
   while true:
     reactor.tick()
 
     logDebug "send telemetry: "
     let telemetry = pack(123)
-    discard reactor.nonconfirm(serverIp, 5557, telemetry)
+    discard reactor.nonconfirm(serverIp, port, telemetry)
 
     for msg in reactor.messages:
       logDebug "Got a new message:", "id:", msg.id, "len:", msg.data.len(), "mtype:", msg.mtype
@@ -383,9 +383,11 @@ proc runTestClient*(serverIp, clientIp: string) =
 when isMainModule:
   const serverIp {.strdefine.} = "127.0.0.1"
   const clientIp {.strdefine.} = "127.0.0.1"
+  const port {.intdefine.} = 6310
+
   when defined(UdpServer):
-    runTestServer(serverIp, clientIp)
+    runTestServer(serverIp, clientIp, port)
   elif defined(UdpClient):
-    runTestServer(serverIp, clientIp)
+    runTestClient(serverIp, clientIp, port)
   else:
     {.fatal: "use -d:UdpServer or -d:UdpClient".}
