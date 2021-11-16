@@ -19,17 +19,17 @@ import msgpack4nim/msgpack2json
 
 
 const
-  defaultMaxIncomingReads = 10
-  defaultMaxUdpPacketSize = 1500
-  defaultMaxInFlight = 2000 # Arbitrary number of packets in flight that we'll allow
-  defaultMaxBackoff = 5_000
-  defaultRetryDuration = initDuration(milliseconds = 250)
+  DefaultMaxIncomingReads = 10
+  DefaultMaxUdpPacketSize = 1500
+  DefaultMaxInFlight = 2000 # Arbitrary number of packets in flight that we'll allow
+  DefaultMaxBackoff = 5_000
+  DefaultRetryDuration = initDuration(milliseconds = 250)
 
 # Splitting up these type definitions since I want to be able to extract this
 # stuff later.
 type
   Address* = object
-    host*: string
+    host*: IpAddress
     port*: Port
 
   MsgId = uint16
@@ -65,14 +65,6 @@ type
     messages*: seq[Message]
     toSend: seq[Message]
     debug: DebugInfo
-
-proc initAddress*(host: string, port: Port): Address =
-  result.host = host
-  result.port = port
-
-proc initAddress*(host: string, port: int): Address =
-  result.host = host
-  result.port = Port(port)
 
 proc messageToBytes(message: Message, buf: var MsgBuffer) =
   let mtype = uint8(ord(message.mtype))
@@ -146,29 +138,32 @@ proc sendMessages(reactor: Reactor) =
 proc readMessages(reactor: Reactor) =
   var
     buf = MsgBuffer.init(reactor.debug.maxUdpPacketSize)
-    host: string
-    port: Port
 
   # Try to read 1000 messages from the socket. This should probably be configurable
   # Once we're done reading packets, decode them and attempt to match up any acknowledgements
   # with outstanding sends
-  for _ in 0 ..< reactor.debug.maxIncomingReads:
-    var byteLen: int
+  for idx in 0 ..< reactor.debug.maxIncomingReads:
+    var
+      byteLen: int
+      ripaddr: IpAddress
+      rport: Port
+
     try:
-      byteLen = reactor.socket.recvFrom(
-        buf.data,
-        reactor.debug.maxUdpPacketSize,
-        host,
-        port
+
+      byteLen = net.recvFrom(
+        reactor.socket,
+        buf.data, buf.data.len(),
+        ripaddr, rport
       )
+      logInfo "socket recv: byteLen:", byteLen
     except OSError as e:
       # logDebug "socket os error: ", $getCurrentExceptionMsg()
       if e.errorCode == EAGAIN:
-        break
+        continue
       else:
         raise e
 
-    let address = initAddress(host, port)
+    let address = Address(host: ripaddr, port: rport)
     let message = messageFromBytes(buf, address)
 
     # If this is an ack than match it with any existing sends and move on
@@ -245,8 +240,8 @@ proc confirm*(reactor: Reactor, address: Address, data: string): uint16 =
   message.data    = data
   reactor.send(message)
   return id
-proc confirm*(reactor: Reactor, host: string, port: int, data: string): uint16 =
-  let address = initAddress(host, port)
+proc confirm*(reactor: Reactor, host: IpAddress, port: Port, data: string): uint16 =
+  let address = Address(host: host, port: port)
   confirm(reactor, address, data)
 
 proc nonconfirm*(reactor: Reactor, address: Address, data: string): uint16 {.discardable.} =
@@ -259,34 +254,44 @@ proc nonconfirm*(reactor: Reactor, address: Address, data: string): uint16 {.dis
   message.data    = data
   reactor.send(message)
   return id
-proc nonconfirm*(reactor: Reactor, host: string, port: int, data: string): uint16 =
-  let address = initAddress(host, port)
+
+proc nonconfirm*(reactor: Reactor, host: IpAddress, port: Port, data: string): uint16 =
+  let address = Address(host: host, port: port)
   nonconfirm(reactor, address, data)
 
-proc newReactor*(address: Address): Reactor =
+proc cleanupReactor*(reactor: Reactor) =
+  # "cleanup reactor"
+  if reactor.isNil == false:
+    reactor.socket.close()
+
+proc initReactor*(address: Address): Reactor =
   let debugInfo = DebugInfo(
-    maxIncomingReads: defaultMaxIncomingReads,
-    maxUdpPacketSize: defaultMaxUdpPacketSize,
-    maxInFlight: defaultMaxInFlight,
-    maxBackoff: defaultMaxBackoff,
-    baseBackoff: defaultRetryDuration,
+    maxIncomingReads: DefaultMaxIncomingReads,
+    maxUdpPacketSize: DefaultMaxUdpPacketSize,
+    maxInFlight: DefaultMaxInFlight,
+    maxBackoff: DefaultMaxBackoff,
+    baseBackoff: DefaultRetryDuration,
   )
-  result = Reactor()
+  new(result, cleanupReactor)
+  result.id = 1
   result.socket = newSocket(
-    AF_INET,
-    SOCK_DGRAM,
-    IPPROTO_UDP,
+    Domain.AF_INET,
+    nativesockets.SOCK_DGRAM,
+    nativesockets.IPPROTO_UDP,
     buffered = false
   )
-  result.id = 1
   result.socket.getFd().setBlocking(false)
-  result.socket.bindAddr(address.port, address.host)
+  logInfo("Reactor: bind socket:", "host:", address.host, "port:", address.port)
+  result.socket.bindAddr(address.port, $address.host)
   result.debug = debugInfo
 
+  logInfo "Reactor: bound socket:" 
   randomize()
+  logInfo "random" 
 
-proc newReactor*(host: string, port: int): Reactor =
-  result = newReactor(initAddress(host, port))
+proc initReactor*(host: string, port: int): Reactor =
+  let hostip = parseIpAddress(host)
+  result = initReactor(Address(host: hostip, port: Port(port)))
 
 # Putting this here for now since its not attached to the underlying transport
 # layer and I want to keep this isolated.
@@ -295,21 +300,21 @@ type
     m: string
     params: seq[string]
 
-proc runTestServer*(serverIp, clientIp: string, port: int) =
+proc runTestServer*(remoteIp: IpAddress, port: Port, serverIp = "0.0.0.0", serverPort: int = 6310) =
   var
     i = 0
     sendNewMessage = true
     currentRPC: uint16 = 0
 
-  logDebug "Starting reactor", "server(me):", serverIp, "client:", clientIp
-  let reactor = newReactor(serverIp, port)
+  logDebug "Starting reactor", "server(me):", serverIp, "remoteIp:", remoteIp
+  let reactor = initReactor(serverIp, serverPort)
 
   while true:
     reactor.tick()
 
-    logDebug "send telemetry: "
+    logInfo "send telemetry:", "client:", remoteIp, "port:", port
     let telemetry = pack(123)
-    discard reactor.nonconfirm(clientIp, port, telemetry)
+    discard reactor.nonconfirm(remoteIp, port, telemetry)
 
     if sendNewMessage:
       logDebug "Sending RPC"
@@ -317,7 +322,7 @@ proc runTestServer*(serverIp, clientIp: string, port: int) =
       sendNewMessage = false
       let rpc: RPC = ("yo", @[])
       let bin = pack(rpc)
-      currentRPC = reactor.confirm(clientIp, port, bin)
+      currentRPC = reactor.confirm(remoteIp, port, bin)
       logDebug "RPC ID ", currentRPC
 
     case reactor.messageStatus(currentRPC):
@@ -333,44 +338,43 @@ proc runTestServer*(serverIp, clientIp: string, port: int) =
         discard
 
     for msg in reactor.messages:
-      logDebug "Got a new message:", "id:", msg.id, "len:", msg.data.len(), "mtype:", msg.mtype
+      logInfo "Got a new message:", "id:", msg.id, "len:", msg.data.len(), "mtype:", msg.mtype
 
       var s = MsgStream.init(msg.data)
       var rpc = s.toJsonNode()
-      logDebug "RPC: ", $rpc
+      logInfo "RPC: ", $rpc
 
       var buf = pack(123)
       let ack = msg.ack(buf)
       reactor.send(ack)
 
     i.inc()
-    sleep(1000)
+    sleep(500)
 
-proc runTestClient*(serverIp, clientIp: string, port: int) =
+proc runTestClient*(remoteIp: IpAddress, port: Port, serverIp = "0.0.0.0", serverPort: int = 6310) =
   var
     i = 0
-    sendNewMessage = false
-    currentRPC: uint16 = 0
 
-  logDebug "Starting reactor", "client(me):", clientIp, "server:", serverIp
-  let reactor = newReactor(clientIp, port)
+
+  logInfo "Starting reactor", "serverIp(me):", serverIp, "remoteIp:", remoteIp
+  let reactor = initReactor(serverIp, serverPort)
 
   while true:
     reactor.tick()
 
-    logDebug "send telemetry: "
+    logInfo "send telemetry:", "client:", remoteIp, "port:", port
     let telemetry = pack(123)
-    discard reactor.nonconfirm(serverIp, port, telemetry)
+    discard reactor.nonconfirm(remoteIp, port, telemetry)
 
     for msg in reactor.messages:
-      logDebug "Got a new message:", "id:", msg.id, "len:", msg.data.len(), "mtype:", msg.mtype
+      logInfo "Got a new message:", "id:", msg.id, "len:", msg.data.len(), "mtype:", msg.mtype
 
       var s = MsgStream.init(msg.data)
       s.setPosition(0)
 
       var rpc = s.toJsonNode()
-      logDebug "RPC: repr data:", repr msg.data
-      logDebug "RPC:", $rpc
+      logInfo "RPC: repr data:", repr msg.data
+      logInfo "RPC:", $rpc
 
       var buf = pack(123)
       let ack = msg.ack(buf)
@@ -381,13 +385,12 @@ proc runTestClient*(serverIp, clientIp: string, port: int) =
 
 
 when isMainModule:
-  const serverIp {.strdefine.} = "127.0.0.1"
-  const clientIp {.strdefine.} = "127.0.0.1"
-  const port {.intdefine.} = 6310
+  const remoteIp {.strdefine.} = "127.0.0.1"
+  const remotePort {.intdefine.} = 6310
 
   when defined(UdpServer):
-    runTestServer(serverIp, clientIp, port)
+    runTestServer(parseIpAddress remoteIp, Port remotePort)
   elif defined(UdpClient):
-    runTestClient(serverIp, clientIp, port)
+    runTestClient(parseIpAddress remoteIp, Port remotePort)
   else:
     {.fatal: "use -d:UdpServer or -d:UdpClient".}
