@@ -150,9 +150,10 @@ proc readMessages(reactor: Reactor) =
 
     try:
 
+      buf.setPosition(0)
       byteLen = net.recvFrom(
         reactor.socket,
-        buf.data, buf.data.len(),
+        buf.data, reactor.debug.maxUdpPacketSize,
         ripaddr, rport
       )
       logInfo "socket recv: byteLen:", byteLen
@@ -163,6 +164,7 @@ proc readMessages(reactor: Reactor) =
       else:
         raise e
 
+    buf.setPosition(0)
     let address = Address(host: ripaddr, port: rport)
     let message = messageFromBytes(buf, address)
 
@@ -289,9 +291,8 @@ proc initReactor*(address: Address): Reactor =
   randomize()
   logInfo "random" 
 
-proc initReactor*(host: string, port: int): Reactor =
-  let hostip = parseIpAddress(host)
-  result = initReactor(Address(host: hostip, port: Port(port)))
+proc initReactor*(host: IpAddress, port: Port): Reactor =
+  result = initReactor(Address(host: host, port: port))
 
 # Putting this here for now since its not attached to the underlying transport
 # layer and I want to keep this isolated.
@@ -300,21 +301,23 @@ type
     m: string
     params: seq[string]
 
-proc runTestServer*(remoteIp: IpAddress, port: Port, serverIp = "0.0.0.0", serverPort: int = 6310) =
+let defaultServer = Address(host: IPv4_Any(), port: Port 6310)
+
+proc runTestServer*(remote: Address, server = defaultServer) =
   var
     i = 0
     sendNewMessage = true
     currentRPC: uint16 = 0
 
-  logDebug "Starting reactor", "server(me):", serverIp, "remoteIp:", remoteIp
-  let reactor = initReactor(serverIp, serverPort)
+  logDebug "Starting reactor", "server(me):", server, "remoteIp:", remote
+  let reactor = initReactor(server)
 
   while true:
     reactor.tick()
 
-    logInfo "send telemetry:", "client:", remoteIp, "port:", port
+    logInfo "send telemetry:", "client:", remote
     let telemetry = pack(123)
-    discard reactor.nonconfirm(remoteIp, port, telemetry)
+    discard reactor.nonconfirm(remote, telemetry)
 
     if sendNewMessage:
       logDebug "Sending RPC"
@@ -322,7 +325,7 @@ proc runTestServer*(remoteIp: IpAddress, port: Port, serverIp = "0.0.0.0", serve
       sendNewMessage = false
       let rpc: RPC = ("yo", @[])
       let bin = pack(rpc)
-      currentRPC = reactor.confirm(remoteIp, port, bin)
+      currentRPC = reactor.confirm(remote, bin)
       logDebug "RPC ID ", currentRPC
 
     case reactor.messageStatus(currentRPC):
@@ -351,20 +354,19 @@ proc runTestServer*(remoteIp: IpAddress, port: Port, serverIp = "0.0.0.0", serve
     i.inc()
     sleep(500)
 
-proc runTestClient*(remoteIp: IpAddress, port: Port, serverIp = "0.0.0.0", serverPort: int = 6310) =
+proc runTestClient*(remote: Address, server = defaultServer) =
   var
     i = 0
 
-
-  logInfo "Starting reactor", "serverIp(me):", serverIp, "remoteIp:", remoteIp
-  let reactor = initReactor(serverIp, serverPort)
+  logInfo "Starting reactor", "serverIp(me):", server, "remoteIp:", remote
+  let reactor = initReactor(server)
 
   while true:
     reactor.tick()
 
-    logInfo "send telemetry:", "client:", remoteIp, "port:", port
+    logInfo "send telemetry:", "client:", remote 
     let telemetry = pack(123)
-    discard reactor.nonconfirm(remoteIp, port, telemetry)
+    discard reactor.nonconfirm(remote, telemetry)
 
     for msg in reactor.messages:
       logInfo "Got a new message:", "id:", msg.id, "len:", msg.data.len(), "mtype:", msg.mtype
@@ -385,12 +387,18 @@ proc runTestClient*(remoteIp: IpAddress, port: Port, serverIp = "0.0.0.0", serve
 
 
 when isMainModule:
+  const serverIp {.strdefine.} = "0.0.0.0"
+  const serverPort {.intdefine.} = 6310
   const remoteIp {.strdefine.} = "127.0.0.1"
   const remotePort {.intdefine.} = 6310
 
+  let
+    server = Address(host: parseIpAddress serverIp, port: Port serverPort)
+    remote = Address(host: parseIpAddress remoteIp, port: Port remotePort)
+
   when defined(UdpServer):
-    runTestServer(parseIpAddress remoteIp, Port remotePort)
+    runTestServer(remote, server=server)
   elif defined(UdpClient):
-    runTestClient(parseIpAddress remoteIp, Port remotePort)
+    runTestClient(remote, server=server)
   else:
     {.fatal: "use -d:UdpServer or -d:UdpClient".}

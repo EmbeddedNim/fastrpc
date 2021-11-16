@@ -5,8 +5,6 @@ author        = "Jaremy Creechley"
 description   = "fast rpc designed for embedded"
 license       = "Apache-2.0"
 srcDir        = "src"
-installExt    = @["nim"]
-bin           = @["fast_rpc"]
 
 
 # Dependencies
