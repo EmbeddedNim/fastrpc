@@ -9,7 +9,10 @@ import nephyr/times
 
 import routers/router_json
 
+export router_json
+
 import udpsocket
+export udpsocket
 
 proc handleRpcRequest*(srv: Reactor, rt: RpcRouter, msg: Message) =
   # TODO: improvement
@@ -63,4 +66,7 @@ proc startRpcUdpServer*(reactor: var Reactor; router: var RpcRouter, delay = Mil
     os.sleep(delay.int)
 
     
+proc startRpcUdpServer*(server: Address; router: var RpcRouter, settings = initSettings(), delay = Millis(10)) =
+  var reactor = initReactor(server, settings)
+  reactor.startRpcUdpServer(router, delay)
 
