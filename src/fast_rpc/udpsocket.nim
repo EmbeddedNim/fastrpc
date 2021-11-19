@@ -60,6 +60,10 @@ type
     toSend: seq[Message]
     settings: Settings
 
+  ReactorClient* = ref object
+    reactor*: Reactor
+    address*: Address
+
 proc messageToBytes(message: Message, buf: var MsgBuffer) =
   let mtype = uint8(ord(message.mtype))
 
@@ -278,6 +282,13 @@ proc sendNonconfirm*(reactor: Reactor, host: IpAddress, port: Port, data: string
   let address = Address(host: host, port: port)
   sendNonconfirm(reactor, address, data)
 
+proc sendConfirm*(client: ReactorClient, data: string): uint16 {.discardable.} =
+  logInfo "send confirm to: ", client.address
+  client.reactor.sendConfirm(client.address, data)
+
+proc sendNonconfirm*(client: ReactorClient, data: string): uint16 {.discardable.} =
+  client.reactor.sendNonconfirm(client.address, data)
+
 proc cleanupReactor*(reactor: Reactor) =
   # "cleanup reactor"
   if reactor.isNil == false:
@@ -321,6 +332,11 @@ proc initReactor*(address: Address, settings = initSettings()): Reactor =
 
 proc initReactor*(host: IpAddress, port: Port, settings = initSettings()): Reactor =
   result = initReactor(Address(host: host, port: port), settings)
+
+proc createClient*(reactor: Reactor, address: Address): ReactorClient =
+  new(result)
+  result.reactor = reactor
+  result.address = address
 
 # Putting this here for now since its not attached to the underlying transport
 # layer and I want to keep this isolated.

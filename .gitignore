@@ -7,3 +7,4 @@ src/fast_rpc/udpsocket
 src/fast_rpc/transit
 udpclient
 udpserver
+rpc_udp_cli
