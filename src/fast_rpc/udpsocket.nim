@@ -33,7 +33,7 @@ type
   MessageStatus = enum
     InFlight, Delivered, Failed
 
-  Message = ref object
+  Message* = ref object
     address*: Address
     version*: uint8
     id*: MsgId
@@ -44,15 +44,15 @@ type
     nextSend: MonoTime
     attempt: int
 
-  Settings = object
-    maxIncomingReads: int
-    maxUdpPacketSize: int
-    maxInFlight: int
-    maxFailedQueue : int
-    maxBackoff: int
-    baseBackoff: Duration
+  Settings* = object
+    maxIncomingReads*: int
+    maxUdpPacketSize*: int
+    maxInFlight*: int
+    maxFailedQueue*: int
+    maxBackoff*: int
+    baseBackoff*: Duration
 
-  Reactor = ref object
+  Reactor* = ref object
     id: uint16
     socket: Socket
     failedMessages*: seq[MsgId]
@@ -208,6 +208,9 @@ proc readMessages(reactor: Reactor) =
     for idx in toDelete:
       reactor.toSend.delete(idx)
 
+proc takeMessages*(reactor: Reactor): owned seq[Message] =
+  result = reactor.messages
+  reactor.messages = @[]
 
 proc tick*(reactor: Reactor) =
   reactor.messages.setLen(0)
@@ -245,7 +248,7 @@ proc genToken(): string =
   let bytes = rand(int32.high).int32
   token.addInt(bytes)
 
-proc confirm*(reactor: Reactor, address: Address, data: string): uint16 =
+proc sendConfirm*(reactor: Reactor, address: Address, data: string): uint16  {.discardable.} =
   let message     = Message()
   let id          = reactor.getNextId()
   message.mtype   = MessageType.Con
@@ -256,11 +259,11 @@ proc confirm*(reactor: Reactor, address: Address, data: string): uint16 =
   reactor.send(message)
   return id
 
-proc confirm*(reactor: Reactor, host: IpAddress, port: Port, data: string): uint16 =
+proc sendConfirm*(reactor: Reactor, host: IpAddress, port: Port, data: string): uint16 {.discardable.} =
   let address = Address(host: host, port: port)
-  confirm(reactor, address, data)
+  sendConfirm(reactor, address, data)
 
-proc nonconfirm*(reactor: Reactor, address: Address, data: string): uint16 {.discardable.} =
+proc sendNonconfirm*(reactor: Reactor, address: Address, data: string): uint16 {.discardable.} =
   let message     = Message()
   let id          = reactor.getNextId()
   message.mtype   = MessageType.Non
@@ -271,9 +274,9 @@ proc nonconfirm*(reactor: Reactor, address: Address, data: string): uint16 {.dis
   reactor.send(message)
   return id
 
-proc nonconfirm*(reactor: Reactor, host: IpAddress, port: Port, data: string): uint16 =
+proc sendNonconfirm*(reactor: Reactor, host: IpAddress, port: Port, data: string): uint16 =
   let address = Address(host: host, port: port)
-  nonconfirm(reactor, address, data)
+  sendNonconfirm(reactor, address, data)
 
 proc cleanupReactor*(reactor: Reactor) =
   # "cleanup reactor"
@@ -355,7 +358,7 @@ proc runTestServer*(remote: Address, server = defaultServer) =
 
       let rpc: RPC = ("yo", @[$getMonoTime()])
       let bin = pack(rpc)
-      currentRPC = reactor.confirm(remote, bin)
+      currentRPC = reactor.sendConfirm(remote, bin)
       logInfo "RPC ID ", currentRPC
 
     case reactor.messageStatus(currentRPC):
@@ -370,7 +373,7 @@ proc runTestServer*(remote: Address, server = defaultServer) =
       of MessageStatus.InFlight:
         discard
 
-    for msg in reactor.messages:
+    for msg in reactor.takeMessages():
       logInfo "Got a new message:", "id:", msg.id, "len:", msg.data.len(), "mtype:", msg.mtype
 
       # var s = MsgStream.init(msg.data)
@@ -407,7 +410,7 @@ proc runTestClient*(remote: Address, server = defaultServer) =
     # let telemetry = pack(123)
     # discard reactor.nonconfirm(remote, telemetry)
 
-    for msg in reactor.messages:
+    for msg in reactor.takeMessages():
       logInfo "Got a new message:", "id:", msg.id, "len:", msg.data.len(), "mtype:", msg.mtype
 
       var s = MsgStream.init(msg.data)

@@ -1,5 +1,6 @@
 import json, tables, strutils, macros, options
 
+
 const
   methodField = "method"
   paramsField = "params"
