@@ -19,14 +19,6 @@ import msgpack4nim
 import msgpack4nim/msgpack2json
 
 
-const
-  DefaultMaxIncomingReads = 40
-  DefaultMaxUdpPacketSize = 1500
-  DefaultMaxInFlight = 2000 # Arbitrary number of packets in flight that we'll allow
-  DefaultMaxFailedQueue = 50
-  DefaultMaxBackoff = 5_000
-  DefaultRetryDuration = initDuration(milliseconds = 250)
-
 # Splitting up these type definitions since I want to be able to extract this
 # stuff later.
 type
@@ -53,7 +45,7 @@ type
     nextSend: MonoTime
     attempt: int
 
-  DebugInfo = object
+  Settings = object
     maxIncomingReads: int
     maxUdpPacketSize: int
     maxInFlight: int
@@ -67,7 +59,7 @@ type
     failedMessages*: seq[MsgId]
     messages*: seq[Message]
     toSend: seq[Message]
-    debug: DebugInfo
+    settings: Settings
 
 proc messageToBytes(message: Message, buf: var MsgBuffer) =
   let mtype = uint8(ord(message.mtype))
@@ -124,14 +116,14 @@ proc sendMessages(reactor: Reactor) =
       reactor.failedMessages.add(msg.id)
       continue
 
-    var buf = MsgBuffer.init(reactor.debug.maxUdpPacketSize)
+    var buf = MsgBuffer.init(reactor.settings.maxUdpPacketSize)
     messageToBytes(msg, buf)
     reactor.socket.sendTo(msg.address.host, msg.address.port, addr buf.data[0], buf.pos)
 
     if msg.mtype == MessageType.Con:
-      let nextDelay = reactor.debug.baseBackoff * 2 ^ msg.attempt
+      let nextDelay = reactor.settings.baseBackoff * 2 ^ msg.attempt
       let jittered  = rand(cast[int](nextDelay.inMilliseconds()))
-      let delay     = min(reactor.debug.maxBackoff, jittered)
+      let delay     = min(reactor.settings.maxBackoff, jittered)
       msg.nextSend = ts + initDuration(milliseconds = delay)
       msg.attempt += 1
       nextMessages.add(msg)
@@ -140,12 +132,12 @@ proc sendMessages(reactor: Reactor) =
 
 proc readMessages(reactor: Reactor) =
   var
-    buf = MsgBuffer.init(reactor.debug.maxUdpPacketSize)
+    buf = MsgBuffer.init(reactor.settings.maxUdpPacketSize)
 
   # Try to read 1000 messages from the socket. This should probably be configurable
   # Once we're done reading packets, decode them and attempt to match up any acknowledgements
   # with outstanding sends
-  for idx in 0 ..< reactor.debug.maxIncomingReads:
+  for idx in 0 ..< reactor.settings.maxIncomingReads:
     var
       byteLen: int
       ripaddr: IpAddress
@@ -156,7 +148,7 @@ proc readMessages(reactor: Reactor) =
       buf.setPosition(0)
       byteLen = net.recvFrom(
         reactor.socket,
-        buf.data, reactor.debug.maxUdpPacketSize,
+        buf.data, reactor.settings.maxUdpPacketSize,
         ripaddr, rport
       )
       logInfo "socket recv: byteLen:", byteLen
@@ -196,15 +188,17 @@ proc tick*(reactor: Reactor) =
   # Bound the size of failed messages
   # slice off the front of failedMessages so .add remains fast
   let
-    fmMaxCount = reactor.debug.maxFailedQueue
+    fmMaxCount = reactor.settings.maxFailedQueue
     fmStartClipped = max(0, reactor.failedMessages.len() - fmMaxCount)
   reactor.failedMessages = 
     reactor.failedMessages[fmStartClipped..^1]
 
 proc send*(reactor: Reactor, message: Message) =
-  # TODO - Return a proper error here so the user knows that they were dropped because our buffer is full
-  if reactor.toSend.len >= reactor.debug.maxInFlight:
-    return
+  # Queue a packet for sending. 
+  #
+  # raises `ResourceExhaustedError` if queue is full
+  if reactor.toSend.len >= reactor.settings.maxInFlight:
+    raise newException(ResourceExhaustedError, "maximum messages allowed")
 
   message.nextSend = getMonoTime()
   message.attempt = 1
@@ -252,6 +246,7 @@ proc confirm*(reactor: Reactor, address: Address, data: string): uint16 =
   message.data    = data
   reactor.send(message)
   return id
+
 proc confirm*(reactor: Reactor, host: IpAddress, port: Port, data: string): uint16 =
   let address = Address(host: host, port: port)
   confirm(reactor, address, data)
@@ -276,15 +271,25 @@ proc cleanupReactor*(reactor: Reactor) =
   if reactor.isNil == false:
     reactor.socket.close()
 
-proc initReactor*(address: Address): Reactor =
-  let debugInfo = DebugInfo(
-    maxIncomingReads: DefaultMaxIncomingReads,
-    maxUdpPacketSize: DefaultMaxUdpPacketSize,
-    maxInFlight: DefaultMaxInFlight,
-    maxFailedQueue: DefaultMaxFailedQueue,
-    maxBackoff: DefaultMaxBackoff,
-    baseBackoff: DefaultRetryDuration,
+proc initSettings*(
+        maxIncomingReads = 40,
+        maxUdpPacketSize = 1500,
+        maxInFlight = 2000, # Arbitrary number of packets in flight that we'll allow
+        maxFailedQueue = 15,
+        maxBackoff = 5_000,
+        retryDuration = initDuration(milliseconds = 250)
+      ): Settings =
+
+  result = Settings(
+    maxIncomingReads: maxIncomingReads,
+    maxUdpPacketSize: maxUdpPacketSize,
+    maxInFlight: maxInFlight,
+    maxFailedQueue: maxFailedQueue,
+    maxBackoff: maxBackoff,
+    baseBackoff: retryDuration,
   )
+
+proc initReactor*(address: Address, settings = initSettings()): Reactor =
   new(result, cleanupReactor)
   result.id = 1
   result.socket = newSocket(
@@ -296,14 +301,14 @@ proc initReactor*(address: Address): Reactor =
   result.socket.getFd().setBlocking(false)
   logInfo("Reactor: bind socket:", "host:", address.host, "port:", address.port)
   result.socket.bindAddr(address.port, $address.host)
-  result.debug = debugInfo
+  result.settings = settings
 
   logInfo "Reactor: bound socket:" 
   randomize()
   logInfo "random" 
 
-proc initReactor*(host: IpAddress, port: Port): Reactor =
-  result = initReactor(Address(host: host, port: port))
+proc initReactor*(host: IpAddress, port: Port, settings = initSettings()): Reactor =
+  result = initReactor(Address(host: host, port: port), settings)
 
 # Putting this here for now since its not attached to the underlying transport
 # layer and I want to keep this isolated.
