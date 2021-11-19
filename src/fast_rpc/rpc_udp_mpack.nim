@@ -16,27 +16,20 @@ proc handleRpcRequest*(srv: Reactor, rt: RpcRouter, msg: Message) =
   # The incoming RPC call needs to be less than 1400 or the network buffer size.
   # This could be improved, but is a bit finicky. In my usage, I only send small
   # RPC calls with possibly larger responses. 
-  var rcall: JsonNode
   var tu0 = Micros(0)
 
-  block rxmsg:
+  logDebug("data from client: ", $(msg.address))
+  logDebug("data from client:l: ", msg.data.len())
+  tu0 = micros()
 
-    logDebug("data from client: ", $(msg.address))
-    logDebug("data from client:l: ", msg.data.len())
-    tu0 = micros()
-    rcall = msgpack2json.toJsonNode(msg.data)
+  var rcall = msgpack2json.toJsonNode(msg.data)
+  logDebug("route rpc", "method: ", $rcall["method"])
 
-  var res: JsonNode
-  block pres:
-      logDebug("route rpc message: ", )
-      logDebug("method: ", $rcall["method"])
-      logDebug("route rpc route: ", )
-      res = rt.route(rcall)
+  var res: JsonNode = rt.route(rcall)
 
   var rmsg: string
-  block prmsg:
-      logDebug("call ran", )
-      rmsg = msgpack2json.fromJsonNode(move res)
+  logDebug("rpc ran", $rcall["method"])
+  rmsg = msgpack2json.fromJsonNode(move res)
   
   let tu3 = micros()
 
