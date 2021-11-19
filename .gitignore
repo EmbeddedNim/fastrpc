@@ -5,3 +5,5 @@ nimcache*
 src/fast_rpc/tcpsocket
 src/fast_rpc/udpsocket
 src/fast_rpc/transit
+udpclient
+udpserver

@@ -4,6 +4,7 @@ import system
 import std/net
 import std/monotimes
 import std/times
+import std/deques
 import nativesockets
 import os
 import std/sysrand
@@ -19,9 +20,10 @@ import msgpack4nim/msgpack2json
 
 
 const
-  DefaultMaxIncomingReads = 10
+  DefaultMaxIncomingReads = 40
   DefaultMaxUdpPacketSize = 1500
   DefaultMaxInFlight = 2000 # Arbitrary number of packets in flight that we'll allow
+  DefaultMaxFailedQueue = 50
   DefaultMaxBackoff = 5_000
   DefaultRetryDuration = initDuration(milliseconds = 250)
 
@@ -55,13 +57,14 @@ type
     maxIncomingReads: int
     maxUdpPacketSize: int
     maxInFlight: int
+    maxFailedQueue : int
     maxBackoff: int
     baseBackoff: Duration
 
   Reactor = ref object
     id: uint16
     socket: Socket
-    failedMessages*: seq[Message]
+    failedMessages*: seq[MsgId]
     messages*: seq[Message]
     toSend: seq[Message]
     debug: DebugInfo
@@ -118,7 +121,7 @@ proc sendMessages(reactor: Reactor) =
     if msg.attempt >= 5:
       # We've reached the maximum reset attempts so mark the message as
       # failed and move on.
-      reactor.failedMessages.add(msg)
+      reactor.failedMessages.add(msg.id)
       continue
 
     var buf = MsgBuffer.init(reactor.debug.maxUdpPacketSize)
@@ -189,7 +192,14 @@ proc readMessages(reactor: Reactor) =
 proc tick*(reactor: Reactor) =
   reactor.messages.setLen(0)
   reactor.sendMessages()
-  reactor.readMessages()
+
+  # Bound the size of failed messages
+  # slice off the front of failedMessages so .add remains fast
+  let
+    fmMaxCount = reactor.debug.maxFailedQueue
+    fmStartClipped = max(0, reactor.failedMessages.len() - fmMaxCount)
+  reactor.failedMessages = 
+    reactor.failedMessages[fmStartClipped..^1]
 
 proc send*(reactor: Reactor, message: Message) =
   # TODO - Return a proper error here so the user knows that they were dropped because our buffer is full
@@ -210,7 +220,7 @@ proc messageStatus*(reactor: Reactor, msgId: MsgId): MessageStatus =
       return MessageStatus.InFlight
 
   for failed in reactor.failedMessages:
-    if failed.id == msgId:
+    if failed == msgId:
       return MessageStatus.Failed
 
   # If we make it to this point we just return a Delivered status since
@@ -271,6 +281,7 @@ proc initReactor*(address: Address): Reactor =
     maxIncomingReads: DefaultMaxIncomingReads,
     maxUdpPacketSize: DefaultMaxUdpPacketSize,
     maxInFlight: DefaultMaxInFlight,
+    maxFailedQueue: DefaultMaxFailedQueue,
     maxBackoff: DefaultMaxBackoff,
     baseBackoff: DefaultRetryDuration,
   )
@@ -315,7 +326,9 @@ proc runTestServer*(remote: Address, server = defaultServer) =
   while true:
     reactor.tick()
 
-    logInfo "send telemetry:", "client:", remote
+    if i mod 1000 == 0:
+      logInfo "send telemetry:", "client:", remote
+
     let telemetry = pack(123)
     discard reactor.nonconfirm(remote, telemetry)
 
@@ -352,7 +365,13 @@ proc runTestServer*(remote: Address, server = defaultServer) =
       reactor.send(ack)
 
     i.inc()
-    sleep(500)
+    if i mod 1000 == 0:
+      logWarn "reactor tick: ", i
+      logWarn "failedMessages:", reactor.failedMessages.len()
+      logWarn "messages: ", reactor.messages.len()
+      logWarn "toSend: ", reactor.toSend.len()
+    # if i > 1_000_000: quit(1)
+    # sleep(5)
 
 proc runTestClient*(remote: Address, server = defaultServer) =
   var
@@ -383,7 +402,7 @@ proc runTestClient*(remote: Address, server = defaultServer) =
       reactor.send(ack)
 
     i.inc()
-    sleep(1000)
+    sleep(20)
 
 
 when isMainModule:
