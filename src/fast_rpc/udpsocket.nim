@@ -1,15 +1,15 @@
 
-# TODO - These imports probably don't work on zephyr so we should fix that
-import system
 import std/net
 import std/monotimes
 import std/times
 import std/deques
+import std/md5
+
 import nativesockets
 import os
-import std/sysrand
-import std/random
 import math
+import std/sysrand, std/random
+
 
 import mcu_utils/logging
 import mcu_utils/msgbuffer
@@ -17,7 +17,6 @@ import mcu_utils/msgbuffer
 import json
 import msgpack4nim
 import msgpack4nim/msgpack2json
-
 
 # Splitting up these type definitions since I want to be able to extract this
 # stuff later.
@@ -99,6 +98,26 @@ proc messageFromBytes(buf: MsgBuffer, address: Address): Message =
 
   result.address = address
 
+proc send*(reactor: Reactor, message: Message) =
+  # Queue a packet for sending. 
+  #
+  # raises `ResourceExhaustedError` if queue is full
+  if reactor.toSend.len >= reactor.settings.maxInFlight:
+    raise newException(ResourceExhaustedError, "maximum messages allowed")
+
+  message.nextSend = getMonoTime()
+  message.attempt = 1
+  reactor.toSend.add(message)
+
+proc ack(message: Message): Message =
+  result = Message()
+  result.version = 0
+  result.id = message.id
+  result.mtype = MessageType.Ack
+  result.token = message.token
+  result.data = getMd5(message.data)[0..4]
+  result.address = message.address
+
 proc sendMessages(reactor: Reactor) =
   var nextMessages: seq[Message]
   let ts = getMonoTime()
@@ -169,17 +188,25 @@ proc readMessages(reactor: Reactor) =
     # Scan the toSend buffer and record their index if they match the id of the
     # message we just received. Once we're done we can delete each index from the
     # toSend buffer
-    if message.mtype == MessageType.Ack:
+    case message.mtype
+    of MessageType.Ack:
       for i, toSend in reactor.toSend:
         if toSend.id == message.id:
           toDelete.add(i)
 
-    for idx in toDelete:
-      reactor.toSend.delete(idx)
+      for idx in toDelete:
+        reactor.toSend.delete(idx)
 
     # Discard any rst messages for now.
-    if message.mtype == MessageType.Con or message.mtype == MessageType.Non:
+    of Con:
+      reactor.send(message.ack())
       reactor.messages.add(message)
+
+    of Non:
+      reactor.messages.add(message)
+
+    of Rst:
+      logWarn "udp reset not implemented!"
 
 proc tick*(reactor: Reactor) =
   reactor.messages.setLen(0)
@@ -192,17 +219,6 @@ proc tick*(reactor: Reactor) =
     fmStartClipped = max(0, reactor.failedMessages.len() - fmMaxCount)
   reactor.failedMessages = 
     reactor.failedMessages[fmStartClipped..^1]
-
-proc send*(reactor: Reactor, message: Message) =
-  # Queue a packet for sending. 
-  #
-  # raises `ResourceExhaustedError` if queue is full
-  if reactor.toSend.len >= reactor.settings.maxInFlight:
-    raise newException(ResourceExhaustedError, "maximum messages allowed")
-
-  message.nextSend = getMonoTime()
-  message.attempt = 1
-  reactor.toSend.add(message)
 
 proc getNextId*(reactor: Reactor): uint16 =
   reactor.id += 1
@@ -226,15 +242,6 @@ proc genToken(): string =
   var token = newString(4)
   let bytes = rand(int32.high).int32
   token.addInt(bytes)
-
-proc ack*(message: Message, data: string): Message =
-  result = Message()
-  result.version = 0
-  result.id = message.id
-  result.token = message.token
-  result.data = data
-  result.mtype = MessageType.Ack
-  result.address = message.address
 
 proc confirm*(reactor: Reactor, address: Address, data: string): uint16 =
   let message     = Message()
@@ -319,6 +326,8 @@ type
 
 let defaultServer = Address(host: IPv4_Any(), port: Port 6310)
 
+const LogNth = 100
+
 proc runTestServer*(remote: Address, server = defaultServer) =
   var
     i = 0
@@ -331,20 +340,21 @@ proc runTestServer*(remote: Address, server = defaultServer) =
   while true:
     reactor.tick()
 
-    if i mod 1000 == 0:
-      logInfo "send telemetry:", "client:", remote
+    # if i mod LogNth == 0:
+    #   logInfo "send telemetry:", "client:", remote
 
-    let telemetry = pack(123)
-    discard reactor.nonconfirm(remote, telemetry)
+    # let telemetry = pack(123)
+    # discard reactor.nonconfirm(remote, telemetry)
 
     if sendNewMessage:
-      logDebug "Sending RPC"
-
+      logInfo "\n"
+      logInfo "Sending RPC"
       sendNewMessage = false
+
       let rpc: RPC = ("yo", @[])
       let bin = pack(rpc)
       currentRPC = reactor.confirm(remote, bin)
-      logDebug "RPC ID ", currentRPC
+      logInfo "RPC ID ", currentRPC
 
     case reactor.messageStatus(currentRPC):
       of MessageStatus.Delivered:
@@ -361,22 +371,23 @@ proc runTestServer*(remote: Address, server = defaultServer) =
     for msg in reactor.messages:
       logInfo "Got a new message:", "id:", msg.id, "len:", msg.data.len(), "mtype:", msg.mtype
 
-      var s = MsgStream.init(msg.data)
-      var rpc = s.toJsonNode()
-      logInfo "RPC: ", $rpc
+      # var s = MsgStream.init(msg.data)
+      # var rpc = s.toJsonNode()
+      # logInfo "RPC: ", $rpc
 
-      var buf = pack(123)
-      let ack = msg.ack(buf)
-      reactor.send(ack)
+      # var buf = pack(123)
+      # let ack = msg.ack(buf)
+      # reactor.send(ack)
 
     i.inc()
-    if i mod 1000 == 0:
+    if i mod LogNth == 0:
       logWarn "reactor tick: ", i
-      logWarn "failedMessages:", reactor.failedMessages.len()
+      logWarn "failedMessages:", reactor.failedMessages
       logWarn "messages: ", reactor.messages.len()
       logWarn "toSend: ", reactor.toSend.len()
     # if i > 1_000_000: quit(1)
-    # sleep(5)
+    when defined(linux):
+      sleep(20)
 
 proc runTestClient*(remote: Address, server = defaultServer) =
   var
@@ -388,9 +399,9 @@ proc runTestClient*(remote: Address, server = defaultServer) =
   while true:
     reactor.tick()
 
-    logInfo "send telemetry:", "client:", remote 
-    let telemetry = pack(123)
-    discard reactor.nonconfirm(remote, telemetry)
+    # logInfo "send telemetry:", "client:", remote 
+    # let telemetry = pack(123)
+    # discard reactor.nonconfirm(remote, telemetry)
 
     for msg in reactor.messages:
       logInfo "Got a new message:", "id:", msg.id, "len:", msg.data.len(), "mtype:", msg.mtype
@@ -403,7 +414,7 @@ proc runTestClient*(remote: Address, server = defaultServer) =
       logInfo "RPC:", $rpc
 
       var buf = pack(123)
-      let ack = msg.ack(buf)
+      let ack = msg.ack()
       reactor.send(ack)
 
     i.inc()
