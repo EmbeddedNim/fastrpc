@@ -194,9 +194,6 @@ proc readMessages(reactor: Reactor) =
         if toSend.id == message.id:
           toDelete.add(i)
 
-      for idx in toDelete:
-        reactor.toSend.delete(idx)
-
     # Discard any rst messages for now.
     of Con:
       reactor.send(message.ack())
@@ -208,9 +205,14 @@ proc readMessages(reactor: Reactor) =
     of Rst:
       logWarn "udp reset not implemented!"
 
+    for idx in toDelete:
+      reactor.toSend.delete(idx)
+
+
 proc tick*(reactor: Reactor) =
   reactor.messages.setLen(0)
   reactor.sendMessages()
+  reactor.readMessages()
 
   # Bound the size of failed messages
   # slice off the front of failedMessages so .add remains fast
@@ -351,7 +353,7 @@ proc runTestServer*(remote: Address, server = defaultServer) =
       logInfo "Sending RPC"
       sendNewMessage = false
 
-      let rpc: RPC = ("yo", @[])
+      let rpc: RPC = ("yo", @[$getMonoTime()])
       let bin = pack(rpc)
       currentRPC = reactor.confirm(remote, bin)
       logInfo "RPC ID ", currentRPC
@@ -396,6 +398,8 @@ proc runTestClient*(remote: Address, server = defaultServer) =
   logInfo "Starting reactor", "serverIp(me):", server, "remoteIp:", remote
   let reactor = initReactor(server)
 
+  logInfo "reactor running "
+
   while true:
     reactor.tick()
 
@@ -416,6 +420,9 @@ proc runTestClient*(remote: Address, server = defaultServer) =
       var buf = pack(123)
       let ack = msg.ack()
       reactor.send(ack)
+
+    if i mod LogNth == 0:
+      logWarn "reactor tick: ", i
 
     i.inc()
     sleep(20)
