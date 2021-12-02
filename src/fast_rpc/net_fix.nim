@@ -1,4 +1,5 @@
 
+import std/nativesockets
 import std/net
 
 export net
