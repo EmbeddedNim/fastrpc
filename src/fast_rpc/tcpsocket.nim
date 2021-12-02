@@ -4,7 +4,7 @@ import selectors
 import tables
 import posix
 
-export net, selectors, tables, posix
+# export net, selectors, tables, posix
 
 import mcu_utils/logging
 
