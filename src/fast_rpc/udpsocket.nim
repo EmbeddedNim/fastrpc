@@ -1,6 +1,5 @@
 
-# import std/net
-import net_fix
+import std/net
 
 import std/monotimes
 import std/times
