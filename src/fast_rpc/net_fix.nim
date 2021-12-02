@@ -21,7 +21,7 @@ proc sendTo*(socket: Socket, address: IpAddress, port: Port,
   var sa: Sockaddr_storage
   var sl: Socklen
   toSockAddr(address, port, sa, sl)
-  result = sendto(socket.fd, cstring(data), data.len().cint, flags.cint,
+  result = sendto(socket.getFd(), cstring(data), data.len().cint, flags.cint,
                   cast[ptr SockAddr](addr sa), sl)
 
   if result == -1'i32:
