@@ -170,7 +170,7 @@ proc readMessages(reactor: Reactor) =
     try:
 
       buf.setPosition(0)
-      byteLen = net.recvFrom(
+      byteLen = recvFrom(
         reactor.socket,
         buf.data, reactor.settings.maxUdpPacketSize,
         ripaddr, rport
