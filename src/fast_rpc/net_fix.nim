@@ -15,8 +15,8 @@ proc sendTo*(socket: Socket, address: IpAddress, port: Port,
   ## If an error occurs an OSError exception will be raised.
   ##
   ## This is the high-level version of the above `sendTo` function.
-  assert(socket.protocol != IPPROTO_TCP, "Cannot `sendTo` on a TCP socket")
-  assert(not socket.isClosed, "Cannot `sendTo` on a closed socket")
+  # assert(socket.protocol != IPPROTO_TCP, "Cannot `sendTo` on a TCP socket")
+  # assert(not socket.isClosed, "Cannot `sendTo` on a closed socket")
 
   var sa: Sockaddr_storage
   var sl: Socklen
