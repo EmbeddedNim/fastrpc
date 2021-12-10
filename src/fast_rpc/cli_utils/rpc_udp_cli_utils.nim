@@ -71,22 +71,25 @@ var
 proc execRpc(client: ReactorClient, i: int, call: JsonNode, opts: RpcOptions): JsonNode = 
   {.cast(gcsafe).}:
     call["id"] = %* id
-    inc(id)
+    echo "rpc id: ", id
 
     let mcall = call.fromJsonNode()
 
     timeBlock("call", opts):
       client.sendConfirm(mcall)
-      print colGray, "wait for response..."
+      # print colGray, "wait for response..."
 
       var msg = ""
       var waitingForResponse = true
       while waitingForResponse:
         client.reactor.tick()
         for umsg in client.reactor.takeMessages():
-          print colGray, "Got a new message:", "id:", $umsg.id, "len:", $umsg.data.len(), "mtype:", $umsg.mtype
+          # print colGray, "Got a new message:", "id:", $umsg.id, "len:", $umsg.data.len(), "mtype:", $umsg.mtype
           msg = umsg.data
-          waitingForResponse = false
+          var mnode: JsonNode = msg.toJsonNode()
+          # echo "resp id: ", mnode["id"], " curr rpc id: ", id
+          if mnode["id"].getInt == id:
+            waitingForResponse = false
 
     if not opts.quiet and not opts.noprint:
       print("[udp data: " & repr(msg) & "]")
@@ -113,6 +116,8 @@ proc execRpc(client: ReactorClient, i: int, call: JsonNode, opts: RpcOptions): J
     if opts.delay > 0:
       os.sleep(opts.delay)
 
+    inc(id)
+
     mnode
 
 proc initRpcCall(id=1): JsonNode =
@@ -128,7 +133,7 @@ proc runRpc(opts: RpcOptions, margs: JsonNode) =
       call[f] = v
 
     let settings = initSettings()
-    let server = Address(host: IPv4_any(), port: Port 6310)
+    let server = Address(host: parseIpAddress "192.168.30.222", port: Port 6310)
     let clientAddr = Address(host: opts.ipAddr, port: opts.port)
 
     let reactor: Reactor = initReactor(server, settings)
@@ -154,8 +159,8 @@ proc runRpc(opts: RpcOptions, margs: JsonNode) =
       print(colMagenta, "[variance time: " & $(ss.variance()) & " millis]")
       print(colMagenta, "[standardDeviation time: " & $(ss.standardDeviation()) & " millis]")
 
-proc call(ip: IpAddress, cmdargs: seq[string], port=Port(6310), dry_run=false, quiet=false, pretty=false, count=1, delay=0, rawJsonArgs="") =
-  var opts = RpcOptions(count: count, delay: delay, ipAddr: ip, port: port, quiet: quiet, dryRun: dry_run, prettyPrint: pretty)
+proc call(ip: IpAddress, cmdargs: seq[string], port=Port(6310), dry_run=false, quiet=false, pretty=false, count=1, delay=0, showstats=false, rawJsonArgs="") =
+  var opts = RpcOptions(count: count, delay: delay, ipAddr: ip, port: port, quiet: quiet, dryRun: dry_run, prettyPrint: pretty, showstats: showstats)
 
   ## Some API call
   let
