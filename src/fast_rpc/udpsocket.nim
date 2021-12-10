@@ -142,7 +142,7 @@ proc sendMessages(reactor: Reactor) =
 
     var buf = MsgBuffer.init(reactor.settings.maxUdpPacketSize)
     messageToBytes(msg, buf)
-    reactor.socket.sendTo(msg.address.host, msg.address.port, buf.data[0..buf.pos])
+    reactor.socket.sendTo(msg.address.host, msg.address.port, buf.data[0..<buf.pos])
 
     if msg.mtype == MessageType.Con:
       let nextDelay = reactor.settings.baseBackoff * 2 ^ msg.attempt
