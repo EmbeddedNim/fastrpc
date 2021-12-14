@@ -126,8 +126,6 @@ proc echoReadHandler*(srv: TcpServerInfo[string], result: ReadyKey, sourceClient
     logDebug("received from client: %s", message)
 
     for cfd, client in srv.clients:
-      # if sourceClient.getFd() == cfd.getFd():
-        # continue
       client.sendWrap(data & message & "\r\L")
 
 proc startSocketServer*[T](port: Port, ipaddrs: openArray[IpAddress], readHandler: TcpServerHandler[T], writeHandler: TcpServerHandler[T], data: var T) =
