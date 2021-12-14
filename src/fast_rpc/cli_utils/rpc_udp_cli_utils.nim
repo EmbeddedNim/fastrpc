@@ -16,7 +16,7 @@ import msgpack4nim/msgpack2json
 import cligen
 from cligen/argcvt import ArgcvtParams, argKeys         # Little helpers
 
-import ../udpsocket
+import ../udptransit
 
 enableTrueColors()
 proc print*(text: varargs[string]) =
