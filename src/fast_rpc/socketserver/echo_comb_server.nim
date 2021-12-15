@@ -3,10 +3,14 @@ import sets
 import mcu_utils/logging
 import ../inet_types
 
+import hashes
+
 type 
   EchoOpts = ref object
-    knownClients: HashSet[InetAddress]
+    knownClients: HashSet[(InetAddress, Socket)]
     prompt: string
+
+proc hash*(sock: Socket): Hash = hash(sock.getFd())
 
 proc sendAllClients*(srv: SocketServerInfo[EchoOpts],
                      data: EchoOpts,
@@ -21,9 +25,10 @@ proc sendAllClients*(srv: SocketServerInfo[EchoOpts],
     if client[1] == SockType.SOCK_STREAM:
       client[0].send(msg)
 
+  logDebug("sendAllClients:", $data.knownClients)
   # udp clients
-  for ia in data.knownClients:
-    sourceClient.sendTo(ia.host, ia.port, msg)
+  for (ia, client) in data.knownClients:
+    client.sendTo(ia.host, ia.port, msg)
 
 proc echoTcpReadHandler*(srv: SocketServerInfo[EchoOpts],
                          result: ReadyKey,
@@ -55,7 +60,7 @@ proc echoUdpReadHandler*(srv: SocketServerInfo[EchoOpts],
   if message == "":
     raise newException(InetClientDisconnected, "")
   else:
-    data.knownClients.incl(InetAddress(host: address, port: port))
+    data.knownClients.incl((InetAddress(host: address, port: port), sourceClient))
     logDebug("received from client:", message)
 
     srv.sendAllClients(data, sourceClient, sourceType, message)
@@ -76,5 +81,5 @@ proc newEchoServer*(prefix = "", selfEchoDisable = false): SocketServerImpl[Echo
   result.readHandler = echoReadHandler
   result.writeHandler = nil 
   result.data = new(EchoOpts) 
-  result.data.knownClients = initHashSet[InetAddress]()
+  result.data.knownClients = initHashSet[(InetAddress, Socket)]()
   result.data.prompt = prefix
