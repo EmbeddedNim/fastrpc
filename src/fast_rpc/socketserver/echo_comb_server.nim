@@ -7,7 +7,6 @@ type
   EchoOpts = ref object
     knownClients: HashSet[InetAddress]
     prompt: string
-    selfEchoDisable: bool
 
 proc sendAllClients*(srv: SocketServerInfo[EchoOpts],
                      data: EchoOpts,
@@ -19,9 +18,8 @@ proc sendAllClients*(srv: SocketServerInfo[EchoOpts],
 
   # tcp clients
   for cfd, client in srv.clients:
-    if data.selfEchoDisable and cfd == sourceClient.getFd():
-      continue
-    client[0].send(msg)
+    if client[1] == SockType.SOCK_STREAM:
+      client[0].send(msg)
 
   # udp clients
   for ia in data.knownClients:
@@ -79,4 +77,3 @@ proc newEchoServer*(prefix = "", selfEchoDisable = false): SocketServerImpl[Echo
   result.data = new(EchoOpts) 
   result.data.knownClients = initHashSet[InetAddress]()
   result.data.prompt = prefix
-  result.data.selfEchoDisable = selfEchoDisable 

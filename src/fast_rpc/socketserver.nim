@@ -87,8 +87,10 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
     if ia.protocol in {Protocol.IPPROTO_TCP}:
       server.listen()
       servers.add(server)
-    else:
+    elif ia.protocol in {Protocol.IPPROTO_UDP}:
       dgramClients.add((server,SOCK_DGRAM,))
+    else:
+      raise newException(ValueError, "unhandled protocol: " & $ia.protocol)
 
     select.registerHandle(server.getFd(), {Event.Read, Event.Write}, serverImpl.data)
   

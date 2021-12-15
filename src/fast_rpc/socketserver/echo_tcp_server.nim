@@ -10,6 +10,7 @@ type
 proc echoTcpReadHandler*(srv: SocketServerInfo[EchoOpts],
                          result: ReadyKey,
                          sourceClient: Socket,
+                         sourceType: SockType,
                          data: EchoOpts) =
 
   var message = sourceClient.recvLine()
@@ -22,7 +23,7 @@ proc echoTcpReadHandler*(srv: SocketServerInfo[EchoOpts],
     for cfd, client in srv.clients:
       if data.selfEchoDisable and cfd == sourceClient.getFd():
         continue
-      client.send(data.prompt & message & "\r\L")
+      client[0].send(data.prompt & message & "\r\L")
 
 proc newEchoTcpServer*(prefix = "", selfEchoDisable = false): SocketServerImpl[EchoOpts] =
   new(result)
