@@ -20,7 +20,7 @@ type
                                   data: T) {.nimcall.}
 
   SocketServerImpl*[T] = ref object
-    defaultData*: T
+    data*: T
     readHandler*: SocketServerHandler[T]
     writeHandler*: SocketServerHandler[T]
 

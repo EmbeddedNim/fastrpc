@@ -14,8 +14,8 @@ export inet_types
 proc processWrites[T](selected: ReadyKey, srv: SocketServerInfo[T], data: T) = 
   var sourceClient: Socket = newSocket(SocketHandle(selected.fd))
   let data = getData(srv.select, selected.fd)
-  if srv.writeHandler != nil:
-    srv.writeHandler(srv, selected, sourceClient, data)
+  if srv.serverImpl.writeHandler != nil:
+    srv.serverImpl.writeHandler(srv, selected, sourceClient, data)
 
 proc processReads[T](selected: ReadyKey, srv: SocketServerInfo[T], data: T) = 
   for server in srv.servers:
@@ -38,8 +38,8 @@ proc processReads[T](selected: ReadyKey, srv: SocketServerInfo[T], data: T) =
     let data = getData(srv.select, sourceFd)
 
     try:
-      if srv.readHandler != nil:
-        srv.readHandler(srv, selected, sourceClient, data)
+      if srv.serverImpl.readHandler != nil:
+        srv.serverImpl.readHandler(srv, selected, sourceClient, data)
 
     except InetClientDisconnected as err:
       var client: Socket
@@ -74,7 +74,7 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
     server.listen()
     servers.add server
 
-    logInfo "socket started on:", "ip:", $ipaddr, "port:", $port, "domain:", $ia.inetDomain()
+    logInfo "socket started on:", "ip:", $ia.host, "port:", $ia.port, "domain:", $ia.inetDomain()
     select.registerHandle(server.getFd(), {Event.Read, Event.Write}, serverImpl.data)
   
   var srv = createServerInfo[T](select, servers, serverImpl)
