@@ -33,7 +33,6 @@ proc processReads[T](selected: ReadyKey, srv: SocketServerInfo[T], data: T) =
       return
 
   if srv.clients.hasKey(SocketHandle(selected.fd)):
-    # let sourceClient: Socket = newSocket(SocketHandle(selected.fd))
     let sourceClient: Socket = srv.clients[SocketHandle(selected.fd)]
     let sourceFd = selected.fd
     let data = getData(srv.select, sourceFd)
