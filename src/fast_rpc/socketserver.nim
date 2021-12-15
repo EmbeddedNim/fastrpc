@@ -26,14 +26,14 @@ proc processReads[T](selected: ReadyKey, srv: SocketServerInfo[T], data: T) =
 
       client.getFd().setBlocking(false)
       srv.select.registerHandle(client.getFd(), {Event.Read}, data)
-      srv.clients[client.getFd()] = client
+      srv.clients[client.getFd()] = (client, SOCK_STREAM)
 
       let id: int = client.getFd().int
       logDebug("client connected: %d", id)
       return
 
   if srv.clients.hasKey(SocketHandle(selected.fd)):
-    let sourceClient: Socket = srv.clients[SocketHandle(selected.fd)]
+    let (sourceClient, sourceType) = srv.clients[SocketHandle(selected.fd)]
     let sourceFd = selected.fd
     let data = getData(srv.select, sourceFd)
 
@@ -42,7 +42,7 @@ proc processReads[T](selected: ReadyKey, srv: SocketServerInfo[T], data: T) =
         srv.serverImpl.readHandler(srv, selected, sourceClient, data)
 
     except InetClientDisconnected as err:
-      var client: Socket
+      var client: (Socket, SockType)
       discard srv.clients.pop(sourceFd.SocketHandle, client)
       srv.select.unregister(sourceFd)
       discard posix.close(sourceFd.cint)
@@ -64,7 +64,7 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
   # Initialize and setup a new socket server
   var select: Selector[T] = newSelector[T]()
   var servers = newSeq[Socket]()
-  var dgramClients = newSeq[Socket]()
+  var dgramClients = newSeq[(Socket, SockType)]()
 
   for ia in ipaddrs:
     logInfo "Server: starting "
@@ -85,7 +85,7 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
       server.listen()
       servers.add server
     else:
-      dgramClients.add server
+      dgramClients.add((server,SOCK_DGRAM,))
 
     select.registerHandle(server.getFd(), {Event.Read, Event.Write}, serverImpl.data)
   

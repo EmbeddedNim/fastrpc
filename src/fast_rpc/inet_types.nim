@@ -13,7 +13,7 @@ type
   SocketServerInfo*[T] = ref object 
     select*: Selector[T]
     servers*: seq[Socket]
-    clients*: ref Table[SocketHandle, Socket]
+    clients*: ref Table[SocketHandle, (Socket, SockType)]
     serverImpl*: SocketServerImpl[T]
 
   SocketServerHandler*[T] = proc (srv: SocketServerInfo[T],
@@ -39,16 +39,16 @@ proc newInetAddr*(host: string, port: int, protocol = net.IPPROTO_TCP): InetAddr
 proc createServerInfo*[T](selector: Selector[T],
                           servers: seq[Socket],
                           serverImpl: SocketServerImpl,
-                          clients: seq[Socket] = @[]
+                          clients: seq[(Socket, SockType)] = @[]
                           ): SocketServerInfo[T] = 
   result = new(SocketServerInfo[T])
   result.servers = servers
   result.select = selector
   result.serverImpl = serverImpl
-  result.clients = newTable[SocketHandle, Socket]()
+  result.clients = newTable[SocketHandle, (Socket, SockType)]()
 
-  for client in clients:
-    result.clients[client.getFd()] = client
+  for (client, ctype) in clients:
+    result.clients[client.getFd()] = (client, ctype)
 
 proc inetDomain*(inetaddr: InetAddress): nativesockets.Domain = 
   case inetaddr.host.family:
