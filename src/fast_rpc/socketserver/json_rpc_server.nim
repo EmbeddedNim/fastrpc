@@ -6,19 +6,16 @@ import net
 import nephyr/logs
 import nephyr/net/tcpsocket
 
-import router
 import json
 
-export tcpsocket, router
+import mcu_utils/logging
+import ../inet_types
+import ../routers/router_json
 
-const TAG = "socketrpc"
-
-initLogs("rpcsocket_json")
-
-proc rpcMsgPackWriteHandler*(srv: TcpServerInfo[RpcRouter], result: ReadyKey, sourceClient: Socket, rt: RpcRouter) =
+proc rpcJsonWriteHandler*(srv: SocketServerInfo[RpcRouter], result: ReadyKey, sourceClient: Socket, rt: RpcRouter) =
   raise newException(OSError, "the request to the OS failed")
 
-proc rpcMsgPackReadHandler*(srv: TcpServerInfo[RpcRouter], result: ReadyKey, sourceClient: Socket, rt: RpcRouter) =
+proc rpcJsonReadHandler*(srv: TcpServerInfo[RpcRouter], result: ReadyKey, sourceClient: Socket, rt: RpcRouter) =
 
   try:
 

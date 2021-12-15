@@ -7,48 +7,15 @@ import posix
 # export net, selectors, tables, posix
 
 import mcu_utils/logging
+import inet_types
 
-const
-  MsgChunk {.intdefine.} = 1400
-
-template sendWrap*(socket: Socket, data: untyped) =
-  # Checks for disconnect errors when sending
-  # This makes it easy to handle dirty disconnects
-  try:
-    socket.send(data)
-  except OSError as err:
-    if err.errorCode == ENOTCONN:
-      var etcp = newException(InetClientDisconnected, "")
-      etcp.errorCode = err.errorCode
-      raise etcp
-
-    else:
-      raise err
-
-type
-  TcpServerInfo*[T] = ref object 
-    select*: Selector[T]
-    servers*: seq[Socket]
-    clients*: ref Table[SocketHandle, Socket]
-    writeHandler*: TcpServerHandler[T]
-    readHandler*: TcpServerHandler[T]
-
-  TcpServerHandler*[T] = proc (srv: TcpServerInfo[T], selected: ReadyKey, client: Socket, data: T) {.nimcall.}
-
-
-proc createServerInfo[T](selector: Selector[T], servers: seq[Socket]): TcpServerInfo[T] = 
-  result = new(TcpServerInfo[T])
-  result.servers = servers
-  result.select = selector
-  result.clients = newTable[SocketHandle, Socket]()
-
-proc processWrites[T](selected: ReadyKey, srv: TcpServerInfo[T], data: T) = 
+proc processWrites[T](selected: ReadyKey, srv: SocketServerInfo[T], data: T) = 
   var sourceClient: Socket = newSocket(SocketHandle(selected.fd))
   let data = getData(srv.select, selected.fd)
   if srv.writeHandler != nil:
     srv.writeHandler(srv, selected, sourceClient, data)
 
-proc processReads[T](selected: ReadyKey, srv: TcpServerInfo[T], data: T) = 
+proc processReads[T](selected: ReadyKey, srv: SocketServerInfo[T], data: T) = 
   for server in srv.servers:
     logDebug("process reads on:", "fd:", selected.fd, "srvfd:", server.getFd().int)
     if SocketHandle(selected.fd) == server.getFd():
@@ -72,14 +39,14 @@ proc processReads[T](selected: ReadyKey, srv: TcpServerInfo[T], data: T) =
       if srv.readHandler != nil:
         srv.readHandler(srv, selected, sourceClient, data)
 
-    except TcpClientDisconnected as err:
+    except InetClientDisconnected as err:
       var client: Socket
       discard srv.clients.pop(sourceFd.SocketHandle, client)
       srv.select.unregister(sourceFd)
       discard posix.close(sourceFd.cint)
       logError("client disconnected: fd: ", $sourceFd)
 
-    except TcpClientError as err:
+    except InetClientError as err:
       srv.clients.del(sourceFd.SocketHandle)
       srv.select.unregister(sourceFd)
 
@@ -90,28 +57,25 @@ proc processReads[T](selected: ReadyKey, srv: TcpServerInfo[T], data: T) =
 
   raise newException(OSError, "unknown socket id: " & $selected.fd.int)
 
-
-proc startSocketServer*[T](port: Port, ipaddrs: openArray[IpAddress], readHandler: TcpServerHandler[T], writeHandler: TcpServerHandler[T], data: var T) =
+proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
+                           serverImpl: SocketServerImpl[T], data: var T) =
+  # Setup posix select configuration
   var select: Selector[T] = newSelector[T]()
   var servers = newSeq[Socket]()
-  for ipaddr in ipaddrs:
-    logInfo "Server: starting "
-    let domain = if ipaddr.family == IpAddressFamily.IPv6: Domain.AF_INET6 else: Domain.AF_INET6 
-    # var server: Socket = newSocket(domain=domain)
-    var server: Socket = newSocket()
 
+  for ia in ipaddrs:
+    logInfo "Server: starting "
+    var server: Socket = newSocket(domain=ia.inetDomain())
     server.setSockOpt(OptReuseAddr, true)
     server.getFd().setBlocking(false)
-    server.bindAddr(port)
+    server.bindAddr(ia.port)
     server.listen()
     servers.add server
 
-    logInfo "Server: started on: ip: ", $ipaddr, " port: ", $port
-    select.registerHandle(server.getFd(), {Event.Read}, data)
+    logInfo "socket started on:", "ip:", $ipaddr, "port:", $port, "domain:", $ia.inetDomain()
+    select.registerHandle(server.getFd(), {Event.Read, Event.Write}, data)
   
-  var srv = createServerInfo[T](select, servers)
-  srv.readHandler = readHandler
-  srv.writeHandler = writeHandler
+  var srv = createServerInfo[T](select, servers, serverImpl)
 
   while true:
     var results: seq[ReadyKey] = select.select(-1)
@@ -121,14 +85,8 @@ proc startSocketServer*[T](port: Port, ipaddrs: openArray[IpAddress], readHandle
           result.processReads(srv, data)
       if Event.Write in result.events:
           result.processWrites(srv, data)
-      # taskYIELD()
-    # delayMillis(1)
-    # vTaskDelay(1.TickType_t)
 
   
   select.close()
   for server in servers:
     server.close()
-
-# when isMainModule:
-  # startSocketServer(Port(5555), readHandler=echoReadHandler, writeHandler=nil)
