@@ -67,7 +67,12 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
 
   for ia in ipaddrs:
     logInfo "Server: starting "
-    var server: Socket = newSocket(domain=ia.inetDomain())
+    var server = newSocket(
+      domain=ia.inetDomain(),
+      sockType=ia.socktype,
+      protocol=ia.protocol,
+      buffered = false
+    )
     server.setSockOpt(OptReuseAddr, true)
     server.getFd().setBlocking(false)
     server.bindAddr(ia.port)

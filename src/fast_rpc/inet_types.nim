@@ -7,6 +7,8 @@ type
     # Combined type for a remote IP address and service port
     host*: IpAddress
     port*: Port
+    protocol*: net.Protocol
+    socktype*: net.SockType
 
   SocketServerInfo*[T] = ref object 
     select*: Selector[T]
@@ -28,9 +30,17 @@ type
   InetClientDisconnected* = object of OSError
   InetClientError* = object of OSError
 
-proc newInetAddr*(host: string, port: int): InetAddress =
+proc newInetAddr*(host: string, port: int, protocol = net.IPPROTO_TCP): InetAddress =
   result.host = parseIpAddress(host)
   result.port = Port(port)
+  result.protocol = protocol
+  case protocol:
+  of net.IPPROTO_TCP:
+    result.socktype = SockType.SOCK_STREAM
+  of net.IPPROTO_UDP:
+    result.socktype = SockType.SOCK_DGRAM
+  else:
+    raise newException(ValueError, "unhandled protocol - specify seperately")
 
 proc createServerInfo*[T](selector: Selector[T],
                           servers: seq[Socket],
