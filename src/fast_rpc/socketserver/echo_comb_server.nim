@@ -36,8 +36,8 @@ proc echoTcpReadHandler*(srv: SocketServerInfo[EchoOpts],
   if message == "":
     raise newException(InetClientDisconnected, "")
   else:
-    logDebug("received from client: %s", message)
-
+    logDebug("received from client:", message)
+    srv.sendAllClients(data, sourceClient, sourceType, message)
 
 proc echoUdpReadHandler*(srv: SocketServerInfo[EchoOpts],
                          result: ReadyKey,
@@ -65,6 +65,7 @@ proc echoReadHandler*(srv: SocketServerInfo[EchoOpts],
                          sourceClient: Socket,
                          sourceType: SockType,
                          data: EchoOpts) =
+  logDebug("echoReadHandler:", "sourceClient:", sourceClient.getFd().int, "socktype:", sourceType)
   if sourceType == SockType.SOCK_STREAM:
     echoTcpReadHandler(srv, result, sourceClient, sourceType, data)
   elif sourceType == SockType.SOCK_DGRAM:
@@ -72,7 +73,7 @@ proc echoReadHandler*(srv: SocketServerInfo[EchoOpts],
   
 proc newEchoServer*(prefix = "", selfEchoDisable = false): SocketServerImpl[EchoOpts] =
   new(result)
-  result.readHandler = echoUdpReadHandler
+  result.readHandler = echoReadHandler
   result.writeHandler = nil 
   result.data = new(EchoOpts) 
   result.data.knownClients = initHashSet[InetAddress]()

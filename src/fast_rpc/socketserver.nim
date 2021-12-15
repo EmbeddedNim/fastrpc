@@ -19,6 +19,7 @@ proc processWrites[T](selected: ReadyKey, srv: SocketServerInfo[T], data: T) =
 
 proc processReads[T](selected: ReadyKey, srv: SocketServerInfo[T], data: T) = 
   let handle = SocketHandle(selected.fd)
+  logDebug("processReads:", "selected:fd:", selected.fd)
 
   if srv.servers.hasKey(handle):
     let server = srv.servers[handle]
@@ -32,13 +33,14 @@ proc processReads[T](selected: ReadyKey, srv: SocketServerInfo[T], data: T) =
       srv.clients[client.getFd()] = (client, SOCK_STREAM)
 
       let id: int = client.getFd().int
-      logDebug("client connected: %d", id)
+      logDebug("client connected:", "fd:", id)
       return
 
   if srv.clients.hasKey(SocketHandle(selected.fd)):
     let (sourceClient, sourceType) = srv.clients[SocketHandle(selected.fd)]
     let sourceFd = selected.fd
     let data = getData(srv.select, sourceFd)
+    logDebug("srv client:", "fd:", selected.fd, "socktype:", sourceType)
 
     try:
       if srv.serverImpl.readHandler != nil:
