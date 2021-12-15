@@ -34,23 +34,21 @@ proc newInetAddr*(host: string, port: int, protocol = net.IPPROTO_TCP): InetAddr
   result.host = parseIpAddress(host)
   result.port = Port(port)
   result.protocol = protocol
-  case protocol:
-  of net.IPPROTO_TCP:
-    result.socktype = SockType.SOCK_STREAM
-  of net.IPPROTO_UDP:
-    result.socktype = SockType.SOCK_DGRAM
-  else:
-    raise newException(ValueError, "unhandled protocol - specify seperately")
+  result.socktype = protocol.toSockType()
 
 proc createServerInfo*[T](selector: Selector[T],
                           servers: seq[Socket],
-                          serverImpl: SocketServerImpl
+                          serverImpl: SocketServerImpl,
+                          clients: seq[Socket] = @[]
                           ): SocketServerInfo[T] = 
   result = new(SocketServerInfo[T])
   result.servers = servers
   result.select = selector
   result.serverImpl = serverImpl
   result.clients = newTable[SocketHandle, Socket]()
+
+  for client in clients:
+    result.clients[client.getFd()] = client
 
 proc inetDomain*(inetaddr: InetAddress): nativesockets.Domain = 
   case inetaddr.host.family:

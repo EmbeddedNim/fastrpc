@@ -33,7 +33,8 @@ proc processReads[T](selected: ReadyKey, srv: SocketServerInfo[T], data: T) =
       return
 
   if srv.clients.hasKey(SocketHandle(selected.fd)):
-    let sourceClient: Socket = newSocket(SocketHandle(selected.fd))
+    # let sourceClient: Socket = newSocket(SocketHandle(selected.fd))
+    let sourceClient: Socket = srv.clients[SocketHandle(selected.fd)]
     let sourceFd = selected.fd
     let data = getData(srv.select, sourceFd)
 
@@ -64,6 +65,7 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
   # Initialize and setup a new socket server
   var select: Selector[T] = newSelector[T]()
   var servers = newSeq[Socket]()
+  var dgramClients = newSeq[Socket]()
 
   for ia in ipaddrs:
     logInfo "Server: starting "
@@ -82,11 +84,13 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
     server.bindAddr(ia.port)
     if ia.protocol in {Protocol.IPPROTO_TCP}:
       server.listen()
+      servers.add server
+    else:
+      dgramClients.add server
 
-    servers.add server
     select.registerHandle(server.getFd(), {Event.Read, Event.Write}, serverImpl.data)
   
-  var srv = createServerInfo[T](select, servers, serverImpl)
+  var srv = createServerInfo[T](select, servers, serverImpl, dgramClients)
 
   while true:
     var results: seq[ReadyKey] = select.select(-1)

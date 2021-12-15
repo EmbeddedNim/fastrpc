@@ -1,9 +1,11 @@
+import sets
 
 import mcu_utils/logging
 import ../inet_types
 
 type 
   EchoOpts = ref object
+    knownClients: HashSet[InetAddress]
     prompt: string
     selfEchoDisable: bool
 
@@ -11,23 +13,31 @@ proc echoUdpReadHandler*(srv: SocketServerInfo[EchoOpts],
                          result: ReadyKey,
                          sourceClient: Socket,
                          data: EchoOpts) =
+  var
+    message = newString(1400)
+  var
+    address: IpAddress
+    port: Port
 
-  var message = sourceClient.recvLine()
+  let cnt =
+    sourceClient.recvFrom(message, message.len(), address, port)
 
   if message == "":
     raise newException(InetClientDisconnected, "")
   else:
-    logDebug("received from client: %s", message)
+    data.knownClients.incl(InetAddress(host: address, port: port))
+    logDebug("received from client:", message)
 
-    for cfd, client in srv.clients:
-      if data.selfEchoDisable and cfd == sourceClient.getFd():
-        continue
-      client.send(data.prompt & message & "\r\L")
+    for ia in data.knownClients:
+      # if data.selfEchoDisable and cfd == sourceClient.getFd():
+        # continue
+      sourceClient.sendTo(ia.host, ia.port, data.prompt & message & "\r\n")
 
 proc newEchoUdpServer*(prefix = "", selfEchoDisable = false): SocketServerImpl[EchoOpts] =
   new(result)
   result.readHandler = echoUdpReadHandler
   result.writeHandler = nil 
   result.data = new(EchoOpts) 
+  result.data.knownClients = initHashSet[InetAddress]()
   result.data.prompt = prefix
   result.data.selfEchoDisable = selfEchoDisable 
