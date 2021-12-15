@@ -16,7 +16,6 @@ proc echoUdpReadHandler*(srv: SocketServerInfo[EchoOpts],
                          data: EchoOpts) =
   var
     message = newString(1400)
-  var
     address: IpAddress
     port: Port
 
@@ -29,10 +28,9 @@ proc echoUdpReadHandler*(srv: SocketServerInfo[EchoOpts],
     data.knownClients.incl(InetAddress(host: address, port: port))
     logDebug("received from client:", message)
 
+    var msg = data.prompt & message & "\r\n"
     for ia in data.knownClients:
-      # if data.selfEchoDisable and cfd == sourceClient.getFd():
-        # continue
-      sourceClient.sendTo(ia.host, ia.port, data.prompt & message & "\r\n")
+      sourceClient.sendTo(ia.host, ia.port, msg)
 
 proc newEchoUdpServer*(prefix = "", selfEchoDisable = false): SocketServerImpl[EchoOpts] =
   new(result)
