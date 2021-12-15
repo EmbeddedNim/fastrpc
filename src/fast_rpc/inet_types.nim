@@ -20,12 +20,17 @@ type
                                   data: T) {.nimcall.}
 
   SocketServerImpl*[T] = ref object
+    defaultData*: T
     readHandler*: SocketServerHandler[T]
     writeHandler*: SocketServerHandler[T]
 
 type 
   InetClientDisconnected* = object of OSError
   InetClientError* = object of OSError
+
+proc newInetAddr*(host: string, port: int): InetAddress =
+  result.host = parseIpAddress(host)
+  result.port = Port(port)
 
 proc createServerInfo*[T](selector: Selector[T],
                           servers: seq[Socket],

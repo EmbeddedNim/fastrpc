@@ -9,6 +9,8 @@ import posix
 import mcu_utils/logging
 import inet_types
 
+export inet_types
+
 proc processWrites[T](selected: ReadyKey, srv: SocketServerInfo[T], data: T) = 
   var sourceClient: Socket = newSocket(SocketHandle(selected.fd))
   let data = getData(srv.select, selected.fd)
@@ -58,8 +60,8 @@ proc processReads[T](selected: ReadyKey, srv: SocketServerInfo[T], data: T) =
   raise newException(OSError, "unknown socket id: " & $selected.fd.int)
 
 proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
-                           serverImpl: SocketServerImpl[T], data: var T) =
-  # Setup posix select configuration
+                           serverImpl: SocketServerImpl[T]) =
+  # Initialize and setup a new socket server
   var select: Selector[T] = newSelector[T]()
   var servers = newSeq[Socket]()
 
@@ -73,7 +75,7 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
     servers.add server
 
     logInfo "socket started on:", "ip:", $ipaddr, "port:", $port, "domain:", $ia.inetDomain()
-    select.registerHandle(server.getFd(), {Event.Read, Event.Write}, data)
+    select.registerHandle(server.getFd(), {Event.Read, Event.Write}, serverImpl.data)
   
   var srv = createServerInfo[T](select, servers, serverImpl)
 
@@ -82,9 +84,9 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
   
     for result in results:
       if Event.Read in result.events:
-          result.processReads(srv, data)
+          result.processReads(srv, serverImpl.data)
       if Event.Write in result.events:
-          result.processWrites(srv, data)
+          result.processWrites(srv, serverImpl.data)
 
   
   select.close()

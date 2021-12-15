@@ -18,7 +18,8 @@ proc echoTcpReadHandler*(srv: SocketServerInfo[string],
     for cfd, client in srv.clients:
       client.send(data & message & "\r\L")
 
-proc configEchoTcpServer*(prefix = ""): SocketServerImpl[string] =
+proc newEchoTcpServer*(prefix = ""): SocketServerImpl[string] =
   new(result)
   result.readHandler = echoTcpReadHandler
   result.writeHandler = nil 
+  result.data = prefix 
