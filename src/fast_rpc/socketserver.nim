@@ -67,19 +67,23 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
 
   for ia in ipaddrs:
     logInfo "Server: starting "
+    logInfo "socket started on:", "ip:", $ia.host, "port:", $ia.port
+    logInfo "socket opts: ", "domain:", $ia.inetDomain(), "sockType:", $ia.socktype, "proto:", $ia.protocol
+
     var server = newSocket(
       domain=ia.inetDomain(),
       sockType=ia.socktype,
       protocol=ia.protocol,
       buffered = false
     )
+
     server.setSockOpt(OptReuseAddr, true)
     server.getFd().setBlocking(false)
     server.bindAddr(ia.port)
-    server.listen()
-    servers.add server
+    if ia.protocol in {Protocol.IPPROTO_TCP}:
+      server.listen()
 
-    logInfo "socket started on:", "ip:", $ia.host, "port:", $ia.port, "domain:", $ia.inetDomain()
+    servers.add server
     select.registerHandle(server.getFd(), {Event.Read, Event.Write}, serverImpl.data)
   
   var srv = createServerInfo[T](select, servers, serverImpl)
