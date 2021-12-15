@@ -12,6 +12,7 @@ type
 proc echoUdpReadHandler*(srv: SocketServerInfo[EchoOpts],
                          result: ReadyKey,
                          sourceClient: Socket,
+                         sourceType: SockType,
                          data: EchoOpts) =
   var
     message = newString(1400)

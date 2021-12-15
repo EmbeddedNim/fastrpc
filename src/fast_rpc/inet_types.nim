@@ -12,13 +12,14 @@ type
 
   SocketServerInfo*[T] = ref object 
     select*: Selector[T]
-    servers*: seq[Socket]
+    servers*: ref Table[SocketHandle, Socket]
     clients*: ref Table[SocketHandle, (Socket, SockType)]
     serverImpl*: SocketServerImpl[T]
 
   SocketServerHandler*[T] = proc (srv: SocketServerInfo[T],
                                   selected: ReadyKey,
                                   client: Socket,
+                                  clientType: SockType,
                                   data: T) {.nimcall.}
 
   SocketServerImpl*[T] = ref object
@@ -42,11 +43,13 @@ proc createServerInfo*[T](selector: Selector[T],
                           clients: seq[(Socket, SockType)] = @[]
                           ): SocketServerInfo[T] = 
   result = new(SocketServerInfo[T])
-  result.servers = servers
   result.select = selector
   result.serverImpl = serverImpl
+  result.servers = newTable[SocketHandle, Socket]()
   result.clients = newTable[SocketHandle, (Socket, SockType)]()
 
+  for server in servers:
+    result.servers[server.getFd()] = server
   for (client, ctype) in clients:
     result.clients[client.getFd()] = (client, ctype)
 

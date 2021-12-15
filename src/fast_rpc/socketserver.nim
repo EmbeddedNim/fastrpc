@@ -12,13 +12,16 @@ import inet_types
 export inet_types
 
 proc processWrites[T](selected: ReadyKey, srv: SocketServerInfo[T], data: T) = 
-  var sourceClient: Socket = newSocket(SocketHandle(selected.fd))
+  let (sourceClient, sourceType) = srv.clients[SocketHandle(selected.fd)]
   let data = getData(srv.select, selected.fd)
   if srv.serverImpl.writeHandler != nil:
-    srv.serverImpl.writeHandler(srv, selected, sourceClient, data)
+    srv.serverImpl.writeHandler(srv, selected, sourceClient, sourceType, data)
 
 proc processReads[T](selected: ReadyKey, srv: SocketServerInfo[T], data: T) = 
-  for server in srv.servers:
+  let handle = SocketHandle(selected.fd)
+
+  if srv.servers.hasKey(handle):
+    let server = srv.servers[handle]
     logDebug("process reads on:", "fd:", selected.fd, "srvfd:", server.getFd().int)
     if SocketHandle(selected.fd) == server.getFd():
       var client: Socket = new(Socket)
@@ -39,7 +42,7 @@ proc processReads[T](selected: ReadyKey, srv: SocketServerInfo[T], data: T) =
 
     try:
       if srv.serverImpl.readHandler != nil:
-        srv.serverImpl.readHandler(srv, selected, sourceClient, data)
+        srv.serverImpl.readHandler(srv, selected, sourceClient, sourceType, data)
 
     except InetClientDisconnected as err:
       var client: (Socket, SockType)
@@ -83,7 +86,7 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
     server.bindAddr(ia.port)
     if ia.protocol in {Protocol.IPPROTO_TCP}:
       server.listen()
-      servers.add server
+      servers.add(server)
     else:
       dgramClients.add((server,SOCK_DGRAM,))
 
