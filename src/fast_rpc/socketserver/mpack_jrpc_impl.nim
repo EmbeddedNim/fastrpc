@@ -7,6 +7,8 @@ import ../routers/router_json
 import json
 import msgpack4nim/msgpack2json
 
+export router_json
+
 type 
   JsonRpcOpts* = ref object
     router*: RpcRouter

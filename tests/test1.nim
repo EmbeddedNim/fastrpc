@@ -7,6 +7,7 @@
 
 import unittest
 
-import fast_rpcpkg/submodule
+import fast_rpc
+
 test "correct welcome":
-  check getWelcomeMessage() == "Hello, World!"
+  echo "hellow world"
