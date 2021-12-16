@@ -33,7 +33,7 @@ type
     writeHandler*: SocketServerHandler[T]
     postProcessHandler*: SocketServerProcessor[T]
 
-  SocketClientSender* = proc (data: string): bool {.closure.}
+  SocketClientSender* = proc (data: string): bool {.closure, gcsafe.}
 
 type 
   InetClientDisconnected* = object of OSError

@@ -4,6 +4,11 @@ import fast_rpc/socketserver/mpack_jrpc_impl
 
 import std/monotimes
 import std/sysrand
+import std/os
+
+import json
+import fast_rpc/inet_types
+import msgpack4nim/msgpack2json
 
 const
   VERSION = "1.0.0"
@@ -13,11 +18,19 @@ type
     uuid*: array[16, byte]
     okay*: bool
 
-
-proc run_micros(sub: (Subscription, SocketClientSender)) = 
+proc run_micros(args: (Subscription, SocketClientSender)) {.gcsafe.} = 
+  var (subId, sender) = args
   while true:
+    echo "sending mono time: ", "sub: ", $subId, " sender: ", repr(sender)
     let a = getMonoTime().ticks()
     var ts = int(a div 1000)
+    var value = %* {"subscription": subId, "result": ts}
+    var msg: string = value.fromJsonNode()
+
+    let res = sender(msg)
+    if not res: break
+    os.sleep(100)
+
 
 
 # Define RPC Server #
@@ -27,13 +40,18 @@ proc rpc_server*(): RpcRouter =
   rpc(rt, "version") do() -> string:
     result = VERSION
 
-  rpc(rt, "micros_subscribe") do() -> Subscription:
-    if urandom(result.uuid):
-      result.okay = true
+  rpc(rt, "micros_subscribe") do() -> JsonNode:
+    var subid: Subscription
+    if urandom(subid.uuid):
+      subid.okay = true
 
     var thr: Thread[(Subscription, SocketClientSender)]
-    var arg = (result, sender)
+    var arg = (subid, sender)
     createThread(thr, run_micros, arg)
+
+    echo("micros subs done")
+    result = % subid
+
 
   rpc(rt, "add") do(a: int, b: int) -> int:
     result = a + b

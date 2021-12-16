@@ -149,6 +149,12 @@ proc runRpc(opts: RpcOptions, margs: JsonNode) =
 
     for i in 1..opts.count:
       discard client.execRpc(i, call, opts)
+
+    while true:
+      let mb = client.recv(4096, timeout = -1)
+      if mb != "":
+        let res = mb.toJsonNode()
+        print("subscription: ", $res)
     client.close()
 
     print("\n")
