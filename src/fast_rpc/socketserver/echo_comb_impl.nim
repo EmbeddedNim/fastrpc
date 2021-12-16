@@ -5,6 +5,7 @@ import ../inet_types
 
 import hashes
 
+const EchoBufferSize = 1400
 type 
   EchoOpts = ref object
     knownClients: HashSet[(InetAddress, Socket)]
@@ -36,33 +37,30 @@ proc echoReadHandler*(srv: SocketServerInfo[EchoOpts],
                          sourceType: SockType,
                          data: EchoOpts) =
   logDebug("echoReadHandler:", "sourceClient:", sourceClient.getFd().int, "socktype:", sourceType)
+  var
+    message = newString(EchoBufferSize)
+
   case sourceType:
   of SockType.SOCK_STREAM:
-    var message = sourceClient.recvLine()
-
-    if message == "":
-      raise newException(InetClientDisconnected, "")
-    else:
-      logDebug("received from client:", message)
-      srv.sendAllClients(data, sourceClient, sourceType, message)
+    discard sourceClient.recv(message, EchoBufferSize)
 
   of SockType.SOCK_DGRAM:
     var
-      message = newString(1400)
       address: IpAddress
       port: Port
 
     discard sourceClient.recvFrom(message, message.len(), address, port)
+    data.knownClients.incl((InetAddress(host: address, port: port), sourceClient))
 
-    if message == "":
-      raise newException(InetClientDisconnected, "")
-    else:
-      data.knownClients.incl((InetAddress(host: address, port: port), sourceClient))
-      logDebug("received from client:", message)
-
-      srv.sendAllClients(data, sourceClient, sourceType, message)
   else:
     raise newException(ValueError, "unhandled socket type: " & $sourceType)
+
+  if message == "":
+    raise newException(InetClientDisconnected, "")
+  else:
+    logDebug("received from client:", message)
+
+    srv.sendAllClients(data, sourceClient, sourceType, message)
 
   
 proc newEchoServer*(prefix = "", selfEchoDisable = false): SocketServerImpl[EchoOpts] =
