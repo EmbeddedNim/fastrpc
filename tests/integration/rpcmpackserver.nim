@@ -24,8 +24,8 @@ proc rpc_server*(): RpcRouter =
 
 when isMainModule:
   let inetAddrs = [
-    newInetAddr("0.0.0.0", 31337, Protocol.IPPROTO_UDP),
-    newInetAddr("0.0.0.0", 31337, Protocol.IPPROTO_TCP),
+    # newInetAddr("0.0.0.0", 5555, Protocol.IPPROTO_UDP),
+    newInetAddr("0.0.0.0", 5555, Protocol.IPPROTO_TCP),
   ]
 
   let router = rpc_server()

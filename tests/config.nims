@@ -5,4 +5,4 @@ switch("profiler", "on")
 switch("stacktrace", "on")
 switch("define", "debug")
 
-switch("define", "McuUtilsLoggingLevel:lvlInfo")
+switch("define", "McuUtilsLoggingLevel:lvlDebug")
