@@ -214,9 +214,10 @@ macro rpc*(server: RpcRouter, path: string, body: untyped): untyped =
   let ReturnType = if parameters.hasReturnType: parameters[0]
                    else: ident "JsonNode"
 
+  let senderName = newIdentNode"sender"
   # delegate async proc allows return and setting of result as native type
   result.add quote do:
-    proc `doMain`(`paramsIdent`: JsonNode, sender: SocketClientSender): `ReturnType` =
+    proc `doMain`(`paramsIdent`: JsonNode, `senderName`: SocketClientSender): `ReturnType` =
       {.cast(gcsafe).}:
         `setup`
         `procBody`
@@ -225,7 +226,7 @@ macro rpc*(server: RpcRouter, path: string, body: untyped): untyped =
     # `JsonNode` results don't need conversion
     result.add quote do:
       proc `procName`(`paramsIdent`: JsonNode, sender: SocketClientSender): JsonNode {.gcsafe.} =
-        return `doMain`(`paramsIdent`)
+        return `doMain`(`paramsIdent`, sender)
   else:
     result.add quote do:
       proc `procName`(`paramsIdent`: JsonNode, sender: SocketClientSender): JsonNode {.gcsafe.} =

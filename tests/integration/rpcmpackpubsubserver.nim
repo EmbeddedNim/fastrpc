@@ -1,3 +1,4 @@
+import fast_rpc/routers/router_json_pubsub
 import fast_rpc/socketserver
 import fast_rpc/socketserver/mpack_jrpc_impl
 
@@ -8,12 +9,12 @@ const
   VERSION = "1.0.0"
 
 type
-  Subscription* = ref object
+  Subscription* = object
     uuid*: array[16, byte]
-    status*: string
+    okay*: bool
 
 
-proc run_micros(sub: Subscription) = 
+proc run_micros(sub: (Subscription, SocketClientSender)) = 
   while true:
     let a = getMonoTime().ticks()
     var ts = int(a div 1000)
@@ -28,12 +29,11 @@ proc rpc_server*(): RpcRouter =
 
   rpc(rt, "micros_subscribe") do() -> Subscription:
     if urandom(result.uuid):
-      result.status = "ok"
-    else:
-      result.status = "error"
+      result.okay = true
 
-    var thr: Thread[Subscription]
-    createThread(thr, run_micros, (result, ))
+    var thr: Thread[(Subscription, SocketClientSender)]
+    var arg = (result, sender)
+    createThread(thr, run_micros, arg)
 
   rpc(rt, "add") do(a: int, b: int) -> int:
     result = a + b
