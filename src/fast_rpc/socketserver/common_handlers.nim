@@ -1,10 +1,6 @@
 
 import mcu_utils/logging
 import ../inet_types
-import ../routers/router_json
-
-import hashes
-import json
 
 type
   rpcExec[R] = proc (router: R, data: string) {.nimcall.}
