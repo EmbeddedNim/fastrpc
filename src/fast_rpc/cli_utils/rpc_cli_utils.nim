@@ -137,7 +137,7 @@ proc runRpc(opts: RpcOptions, margs: JsonNode) =
       call[f] = v
 
     let domain = if opts.ipAddr.family == IpAddressFamily.IPv6: Domain.AF_INET6 else: Domain.AF_INET6 
-    let client: Socket = newSocket(buffered=false, domain=domain)
+    let client: Socket = newSocket(buffered=true, domain=domain)
 
     print(colYellow, "[connecting to server ip addr: ", repr opts.ipAddr,"]")
     client.connect($opts.ipAddr, opts.port)
@@ -268,7 +268,7 @@ proc upload(filenames: seq[string], ip: IpAddress, block_size = 0, port=Port(555
 
 # runRpc()
 
-when isMainModule:
+proc run_cli*() =
   proc argParse(dst: var IpAddress, dfl: IpAddress, a: var ArgcvtParams): bool =
     try:
       dst = a.val.parseIpAddress()
@@ -289,3 +289,6 @@ when isMainModule:
     argHelp($(dfl), a)
 
   dispatchMulti([call], [upload])
+
+when isMainModule:
+  run_cli()
