@@ -1,6 +1,6 @@
 
 import fast_rpc/socketserver
-import fast_rpc/socketserver/echo_tcp_server
+import fast_rpc/socketserver/echo_tcp_impl
 
 
 when isMainModule:

@@ -29,6 +29,7 @@ proc newEchoTcpServer*(prefix = "", selfEchoDisable = false): SocketServerImpl[E
   new(result)
   result.readHandler = echoTcpReadHandler
   result.writeHandler = nil 
+  result.postProcessHandler = nil 
   result.data = new(EchoOpts) 
   result.data.prompt = prefix
   result.data.selfEchoDisable = selfEchoDisable 

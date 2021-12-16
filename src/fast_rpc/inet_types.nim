@@ -22,10 +22,13 @@ type
                                   clientType: SockType,
                                   data: T) {.nimcall.}
 
+  SocketServerProcessor*[T] = proc (srv: SocketServerInfo[T], results: seq[ReadyKey], data: T) {.nimcall.}
+
   SocketServerImpl*[T] = ref object
     data*: T
     readHandler*: SocketServerHandler[T]
     writeHandler*: SocketServerHandler[T]
+    postProcessHandler*: SocketServerProcessor[T]
 
 type 
   InetClientDisconnected* = object of OSError

@@ -1,6 +1,6 @@
 
 import fast_rpc/socketserver
-import fast_rpc/socketserver/echo_udp_server
+import fast_rpc/socketserver/echo_udp_impl
 
 
 when isMainModule:

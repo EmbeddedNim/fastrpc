@@ -82,19 +82,24 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
       protocol=ia.protocol,
       buffered = false
     )
+    logInfo "socket started:", "fd:", server.getFd().int
 
     server.setSockOpt(OptReuseAddr, true)
     server.getFd().setBlocking(false)
     server.bindAddr(ia.port)
+
+    var events: set[Event]
     if ia.protocol in {Protocol.IPPROTO_TCP}:
       server.listen()
       servers.add(server)
+      events = {Event.Read, Event.Write}
     elif ia.protocol in {Protocol.IPPROTO_UDP}:
       dgramClients.add((server,SOCK_DGRAM,))
+      events = {Event.Read}
     else:
       raise newException(ValueError, "unhandled protocol: " & $ia.protocol)
 
-    select.registerHandle(server.getFd(), {Event.Read, Event.Write}, serverImpl.data)
+    select.registerHandle(server.getFd(), events, serverImpl.data)
   
   var srv = createServerInfo[T](select, servers, serverImpl, dgramClients)
 
@@ -102,10 +107,14 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
     var results: seq[ReadyKey] = select.select(-1)
   
     for result in results:
+      logDebug "event:", repr(result)
       if Event.Read in result.events:
           result.processReads(srv, serverImpl.data)
       if Event.Write in result.events:
           result.processWrites(srv, serverImpl.data)
+    
+    if serverImpl.postProcessHandler != nil:
+      serverImpl.postProcessHandler(srv, results, serverImpl.data)
 
   
   select.close()
