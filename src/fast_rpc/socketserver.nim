@@ -71,10 +71,9 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
   var servers = newSeq[Socket]()
   var dgramClients = newSeq[(Socket, SockType)]()
 
+  logInfo "SocketServer: starting"
   for ia in ipaddrs:
-    logInfo "Server: starting "
-    logInfo "socket started on:", "ip:", $ia.host, "port:", $ia.port
-    logInfo "socket opts: ", "domain:", $ia.inetDomain(), "sockType:", $ia.socktype, "proto:", $ia.protocol
+    logInfo "creating socket on:", "ip:", $ia.host, "port:", $ia.port, $ia.inetDomain(), "sockType:", $ia.socktype, $ia.protocol
 
     var server = newSocket(
       domain=ia.inetDomain(),
@@ -82,7 +81,7 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
       protocol=ia.protocol,
       buffered = false
     )
-    logInfo "socket started:", "fd:", server.getFd().int
+    logDebug "socket started:", "fd:", server.getFd().int
 
     server.setSockOpt(OptReuseAddr, true)
     server.getFd().setBlocking(false)

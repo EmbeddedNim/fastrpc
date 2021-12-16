@@ -2,7 +2,7 @@
 import fast_rpc/socketserver
 import fast_rpc/socketserver/echo_comb_impl
 
-import nimprof
+# import nimprof
 
 when isMainModule:
   let inetAddrs = [
