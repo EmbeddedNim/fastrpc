@@ -17,6 +17,8 @@ from cligen/argcvt import ArgcvtParams, argKeys         # Little helpers
 when not defined(TcpJsonRpcServer):
   import msgpack4nim/msgpack2json
 
+import fast_rpc/socketserver/common_handlers
+
 enableTrueColors()
 proc print*(text: varargs[string]) =
   stdout.write(text)
@@ -81,14 +83,14 @@ proc execRpc( client: Socket, i: int, call: JsonNode, opts: RpcOptions): JsonNod
     timeBlock("call", opts):
       client.send( mcall )
       var msgLenBytes = client.recv(4, timeout = -1)
-      var msgLen: int32 = 0
-      print("[socket data:lenstr: " & repr(msgLenBytes) & "]")
       if msgLenBytes.len() == 0: return
-      for i in countdown(3,0):
-        msgLen = (msgLen shl 8) or int32(msgLenBytes[i])
+      var msgLen: int32 = msgLenBytes.lengthFromBigendian32()
+      print("[socket data:lenstr: " & repr(msgLenBytes) & "]")
+      print("[socket data:len: " & repr(msgLen) & "]")
 
       var msg = ""
       while msg.len() < msgLen:
+        print("[reading msg]")
         let mb = client.recv(4096, timeout = -1)
         if not opts.quiet and not opts.noprint:
           print("[read bytes: " & $mb.len() & "]")
@@ -99,7 +101,8 @@ proc execRpc( client: Socket, i: int, call: JsonNode, opts: RpcOptions): JsonNod
 
     if not opts.quiet and not opts.noprint:
       print colGray, "[read bytes: ", $msg.len(), "]"
-      print colGray, "[read: ", repr(msg), "]"
+      print colBlue, "wazzah"
+      # print colGray, "[read: ", repr(msg), "]"
 
     var mnode: JsonNode = 
       when defined(TcpJsonRpcServer):

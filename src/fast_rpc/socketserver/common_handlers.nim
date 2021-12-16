@@ -33,6 +33,11 @@ proc lengthBigendian32*(ln: int): string =
   result = newString(4)
   bigEndian32(result.cstring(), addr sz)
 
+proc lengthFromBigendian32*(datasz: string): int32 =
+  result = 0
+  bigEndian32(addr result, datasz.cstring())
+
+
 template customPacketRpcHandler*(name, rpcExec: untyped): untyped =
 
   proc `name`*[T](srv: SocketServerInfo[T],
