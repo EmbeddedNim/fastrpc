@@ -13,45 +13,20 @@ type
   JsonRpcOpts* = ref object
     router*: RpcRouter
     bufferSize*: int
+    prefixMsgSize*: bool
 
-proc mpackHandler*(rt: RpcRouter, msg: var string): string =
+proc rpcExec*(rt: RpcRouter, msg: var string): string =
   var rcall = msgpack2json.toJsonNode(msg)
   var res: JsonNode = rt.route( rcall )
   result = $res
 
-proc mpackJRpcHandler*(srv: SocketServerInfo[JsonRpcOpts],
-                         result: ReadyKey,
-                         sourceClient: Socket,
-                         sourceType: SockType,
-                         data: JsonRpcOpts) =
-  var
-    message = newString(data.bufferSize)
+include common_handlers
 
-  case sourceType:
-  of SockType.SOCK_STREAM:
-    discard sourceClient.recv(message, data.bufferSize)
-    if message == "":
-      raise newException(InetClientDisconnected, "")
-
-    var response = mpackHandler(data.router, message)
-    sourceClient.send(response)
-
-  of SockType.SOCK_DGRAM:
-    var
-      host: IpAddress
-      port: Port
-
-    discard sourceClient.recvFrom(message, message.len(), host, port)
-    var response = mpackHandler(data.router, message)
-    sourceClient.sendTo(host, port, response)
-
-  else:
-    raise newException(ValueError, "unhandled socket type: " & $sourceType)
-
-proc newMpackJRpcServer*(router: RpcRouter, bufferSize = 1400): SocketServerImpl[JsonRpcOpts] =
+proc newMpackJRpcServer*(router: RpcRouter, bufferSize = 1400, prefixMsgSize = false): SocketServerImpl[JsonRpcOpts] =
   new(result)
-  result.readHandler = mpackJRpcHandler
+  result.readHandler = packetRpcHandler
   result.writeHandler = nil 
   result.data = new(JsonRpcOpts) 
   result.data.bufferSize = bufferSize 
   result.data.router = router
+  result.data.prefixMsgSize = prefixMsgSize

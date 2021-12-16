@@ -1,160 +1,88 @@
 import json, tables, strutils, macros, options
-import net, os, times, stats
-import sequtils, locks
+import strformat
+import net, os
+import streams
+import times
+import stats
+import sequtils
+import locks
+import sugar
+import terminal 
+import colors
 
-import parseopt
+import cligen
+from cligen/argcvt import ArgcvtParams, argKeys         # Little helpers
 
-type
-  CliColors = enum
-    black,
-    red,
-    green,
-    yellow,
-    blue,
-    magenta,
-    cyan,
-    grey
+# import nesper/servers/rpc/router
+when not defined(TcpJsonRpcServer):
+  import msgpack4nim/msgpack2json
 
-proc echo*(color: CliColors, text: varargs[string]) =
-  case color:
-  of black:
-    stdout.write "\e[30m"
-  of red:
-    stdout.write "\e[31m"
-  of green:
-    stdout.write "\e[32m"
-  of yellow:
-    stdout.write "\e[33m"
-  of grey:
-    stdout.write "\e[90m"
-  of blue:
-    stdout.write "\e[34m"
-  of magenta:
-    stdout.write "\e[35m"
-  of cyan:
-    stdout.write "\e[36m"
-
-  stdout.write text
-  stdout.write "\e[0m\n"
+enableTrueColors()
+proc print*(text: varargs[string]) =
+  stdout.write(text)
+  stdout.write("\n")
   stdout.flushFile()
 
-type
-  RpcCli = object
+proc print*(color: Color, text: varargs[string]) =
+  stdout.setForegroundColor(color)
+
+  stdout.write text
+  stdout.write "\n"
+  # stdout.write "\e[0m\n"
+  stdout.setForegroundColor(fgDefault)
+  stdout.flushFile()
+
+
+type 
+  RpcOptions = object
+    id: int
     showstats: bool
     count: int
     delay: int
     jsonArg: string
-    ipAddr: string
+    ipAddr: IpAddress
     port: Port
     prettyPrint: bool
     quiet: bool
-    totalTime: int64
-    totalCalls: int64
-    id: int 
-    allTimes: seq[int64]
+    dryRun: bool
+    noprint: bool
 
-proc rpcOptions*(p: var OptParser): RpcCli = 
-  result = RpcCli()
+var totalTime = 0'i64
+var totalCalls = 0'i64
 
-  result.showstats = false
-  result.count = 1
-  result.delay = 0
-  result.quiet = false
-  result.jsonArg = ""
-  result.ipAddr = ""
-  result.port = Port(5555)
-  result.prettyPrint = false
-  result.id = 1
-
-  for kind, key, val in p.getopt():
-    case kind
-    of cmdArgument:
-      result.jsonArg = key
-    of cmdLongOption, cmdShortOption:
-      case key
-      of "count", "c":
-        result.count = parseInt(val)
-      of "ip", "i":
-        result.ipAddr = val
-      of "port", "p":
-        result.port = Port(parseInt(val))
-      of "stats", "s":
-        result.showstats  = true
-      of "delay", "d":
-        result.delay = parseInt(val)
-      of "pretty", "q":
-        result.prettyPrint = parseBool(val)
-    of cmdEnd: assert(false) # cannot happen
-
-  echo "args: ", $result
-
-  if result.ipAddr == "":
-    # no filename has been given, so we show the help
-    raise newException(ValueError, "missing ip address")
-
-  result.allTimes = newSeqOfCap[int64](result.count)
-
-  # Check IP address
-  try:
-    discard parseIpAddress(result.ipAddr)
-  except CatchableError as err:
-    echo "invalid IP address, check the --ip:$IP argument"
-    raise err
-    
-template timeBlock*(n: string, args: RpcCli, blk: untyped): untyped =
+template timeBlock(n: string, opts: RpcOptions, blk: untyped): untyped =
   let t0 = getTime()
   blk
 
   let td = getTime() - t0
-  echo grey, "[took: ", $(td.inMicroseconds().float() / 1e3), " millis]"
-  args.totalCalls.inc()
-  args.totalTime = args.totalTime + td.inMicroseconds()
-  args.allTimes.add(td.inMicroseconds())
+  if not opts.noprint:
+    print colGray, "[took: ", $(td.inMicroseconds().float() / 1e3), " millis]"
+  totalCalls.inc()
+  totalTime = totalTime + td.inMicroseconds()
+  allTimes.add(td.inMicroseconds())
   
 
-when RpcServerType == "json":
-  proc execRpc*(args: var RpcCli, client: Socket, i: int, call: JsonNode): JsonNode = 
-    call["id"] = %* args.id
-    inc(args.id)
+
+var
+  id: int = 1
+  allTimes = newSeq[int64]()
+
+proc execRpc( client: Socket, i: int, call: JsonNode, opts: RpcOptions): JsonNode = 
+  {.cast(gcsafe).}:
+    call["id"] = %* id
+    inc(id)
 
     let mcall = 
+      when defined(TcpJsonRpcServer):
         $call
-
-    timeBlock("call", args):
-      client.send( mcall )
-      var msg = client.recv(4096, timeout = -1)
-
-    # echo("[socket data: " & repr(msg) & "]")
-
-    if not args.quiet:
-      echo grey, "[read bytes: " & $msg.len() & "]"
-
-    result = msg.parseJson()
-
-    if not args.quiet:
-      echo()
-      if args.prettyPrint:
-        echo(blue, pretty(result))
       else:
-        echo(blue, $(result))
+        call.fromJsonNode()
 
-    if not args.quiet:
-      echo green, "[rpc done at " & $now() & "]"
-    if args.delay > 0:
-      os.sleep(args.delay)
-
-elif RpcServerType == "mpack":
-  proc execRpc*(args: var RpcCli, client: Socket, i: int, call: JsonNode): JsonNode = 
-    call["id"] = %* args.id
-    inc(args.id)
-
-    let mcall = 
-        $call
-
-    timeBlock("call", args):
+    timeBlock("call", opts):
       client.send( mcall )
       var msgLenBytes = client.recv(4, timeout = -1)
       var msgLen: int32 = 0
+      # echo grey, "[socket data:lenstr: " & repr(msgLenBytes) & "]"
       if msgLenBytes.len() == 0: return
       for i in countdown(3,0):
         msgLen = (msgLen shl 8) or int32(msgLenBytes[i])
@@ -162,62 +90,202 @@ elif RpcServerType == "mpack":
       var msg = ""
       while msg.len() < msgLen:
         let mb = client.recv(4*1024, timeout = -1)
+        if not opts.quiet and not opts.noprint:
+          print("[read bytes: " & $mb.len() & "]")
         msg.add mb
 
-    # echo("[socket data: " & repr(msg) & "]")
-    if not args.quiet:
-      echo grey, "[read bytes: " & $msg.len() & "]"
+    if not opts.quiet and not opts.noprint:
+      print("[socket data: " & repr(msg) & "]")
 
-    result = msg.toJsonNode()
+    if not opts.quiet and not opts.noprint:
+      print colGray, "[read bytes: ", $msg.len(), "]"
+      print colGray, "[read: ", repr(msg), "]"
 
-    if not args.quiet:
-      echo()
-      if args.prettyPrint:
-        echo(blue, pretty(result))
+    var mnode: JsonNode = 
+      when defined(TcpJsonRpcServer):
+        msg.parseJson()
       else:
-        echo(blue, $(result))
+        msg.toJsonNode()
 
-    if not args.quiet:
-      echo green, "[rpc done at " & $now() & "]"
-    if args.delay > 0:
-      os.sleep(args.delay)
+    if not opts.noprint:
+      print("")
 
-proc runRpc*(args: var RpcCli) = 
-  var call: JsonNode
-  if args.jsonArg == "":
-    call = %* { "jsonrpc": "2.0", "id": 1, "method": "add", "params": [1, 2] }
-  else:
-    call = %* { "jsonrpc": "2.0", "id": 1 }
+    if not opts.noprint: 
+      if opts.prettyPrint:
+        print(colAquamarine, pretty(mnode))
+      else:
+        print(colAquamarine, $(mnode))
 
-  let m = parseJson(args.jsonArg)
+    if not opts.quiet and not opts.noprint:
+      print colGreen, "[rpc done at " & $now() & "]"
 
-  for (f,v) in m.pairs():
-    call[f] = v
+    if opts.delay > 0:
+      os.sleep(opts.delay)
+
+    mnode
+
+proc initRpcCall(id=1): JsonNode =
+  result = %* { "jsonrpc": "2.0", "id": id}
+proc initRpcCall(name: string, args: JsonNode, id=1): JsonNode =
+  result = %* { "jsonrpc": "2.0", "id": id, "method": name, "params": args}
+
+proc runRpc(opts: RpcOptions, margs: JsonNode) = 
+  {.cast(gcsafe).}:
+    var call = initRpcCall()
+
+    for (f,v) in margs.pairs():
+      call[f] = v
+
+    let domain = if opts.ipAddr.family == IpAddressFamily.IPv6: Domain.AF_INET6 else: Domain.AF_INET6 
+    let client: Socket = newSocket(buffered=false, domain=domain)
+
+    print(colYellow, "[connecting to server ip addr: ", repr opts.ipAddr,"]")
+    client.connect($opts.ipAddr, opts.port)
+    print(colYellow, "[connected to server ip addr: ", $opts.ipAddr,"]")
+    print(colBlue, "[call: ", $call, "]")
+
+    for i in 1..opts.count:
+      discard client.execRpc(i, call, opts)
+    client.close()
+
+    print("\n")
+
+    if opts.showstats: 
+      print(colMagenta, "[total time: " & $(totalTime.float() / 1e3) & " millis]")
+      print(colMagenta, "[total count: " & $(totalCalls) & " No]")
+      print(colMagenta, "[avg time: " & $(float(totalTime.float()/1e3)/(1.0 * float(totalCalls))) & " millis]")
+
+      var ss: RunningStat ## Must be "var"
+      ss.push(allTimes.mapIt(float(it)/1000.0))
+
+      print(colMagenta, "[mean time: " & $(ss.mean()) & " millis]")
+      print(colMagenta, "[max time: " & $(allTimes.max().float()/1_000.0) & " millis]")
+      print(colMagenta, "[variance time: " & $(ss.variance()) & " millis]")
+      print(colMagenta, "[standardDeviation time: " & $(ss.standardDeviation()) & " millis]")
+
+proc doRpcCall(client: Socket, opts: var RpcOptions, name: string, args: JsonNode): JsonNode =
+  opts.id.inc()
+  let
+    call = initRpcCall(name, args)
+    res = client.execRpc(opts.id, call, opts)
+
+  try:
+    result = res["result"]
+  except KeyError:
+    raise newException(ValueError, fmt"missing result key from: {$res} for call: {$call}")
+
+proc doRpcCall(client: Socket, opts: var RpcOptions, name: string, args: varargs[JsonNode]): JsonNode =
+  let jargs = % args
+  doRpcCall(client, opts, name, jargs)
+
+proc call(ip: IpAddress, cmdargs: seq[string], port=Port(5555), dry_run=false, quiet=false, pretty=false, count=1, delay=0, showstats=false, rawJsonArgs="") =
+  var opts = RpcOptions(count: count, delay: delay, ipAddr: ip, port: port, quiet: quiet, dryRun: dry_run, showstats: showstats, prettyPrint: pretty)
+
+  ## Some API call
+  let
+    name = cmdargs[0]
+    args = cmdargs[1..^1]
+    # cmdargs = @[name, rawJsonArgs]
+    pargs = collect(newSeq):
+      for ca in args:
+        parseJson(ca)
+    jargs = if rawJsonArgs == "": %pargs else: rawJsonArgs.parseJson() 
+  
+  echo fmt("rpc call: name: '{name}' args: '{args}' ip:{repr ip} ")
+  echo fmt("rpc params: {repr jargs}")
+  echo fmt("rpc params: {$jargs}")
+
+  let margs = %* {"method": name, "params": % jargs }
+  if not opts.dryRun:
+    opts.runRpc(margs)
+
+import progress
+
+proc upload(filenames: seq[string], ip: IpAddress, block_size = 0, port=Port(5555), permanent=false) = 
+  var opts = RpcOptions(count: 1, ipAddr: ip, port: port, quiet: true,  noprint: true)
+
+  assert filenames.len() == 1, "can only upload one file at a time"
+  let filename = filenames[0]
+  print colAquamarine, fmt"opening firmware: {repr filename}"
+
+  if not filename.fileExists():
+    print colRed, fmt"not a valid file: {repr filename}"
+    print "...aborting"
+    quit(1)
+
+  let flSizeBytes = getFileSize(filename).int
+
+  var strm = openFileStream(filename, fmRead)
+  # Close the file object when you are done with it
+  defer: strm.close()
 
   let client: Socket = newSocket(buffered=false)
-  client.connect(args.ipAddr, args.port)
-  echo(yellow, "[connected to server ip addr: ", args.ipAddr,"]")
-  echo(blue, "[call: ", $call, "]")
+  defer: client.close()
 
-  for i in 1..args.count:
-    discard args.execRpc(client, i, call)
-  client.close()
+  client.connect($opts.ipAddr, opts.port)
+  print(colYellow, "[connected to server ip addr: ", $opts.ipAddr,"]")
 
-  echo("\n")
+  let chunkSize =
+    if block_size > 0:
+      block_size
+    else:
+      let res = client.doRpcCall(opts, "fw-info")
+      res["block_size"].getInt()
 
-  if args.showstats: 
-    echo("[total time: " & $(args.totalTime.float() / 1e3) & " millis]", magenta)
-    echo("[total count: " & $(args.totalCalls) & " No]", magenta)
-    echo("[avg time: " & $(float(args.totalTime.float()/1e3)/(1.0 * float(args.totalCalls))) & " millis]", magenta)
+  block begin_firmware_uploads:
+    let res = client.doRpcCall(opts, "fw-init")
+    assert res.getBool() == true
 
-    var ss: RunningStat ## Must be "var"
-    ss.push(args.allTimes.mapIt(float(it)/1000.0))
+  let chunks = flSizeBytes div chunkSize
+  var bar = newProgressBar(chunks)
+  bar.start()
 
-    echo("[mean time: " & $(ss.mean()) & " millis]", magenta)
-    echo("[max time: " & $(args.allTimes.max().float()/1_000.0) & " millis]", magenta)
-    echo("[variance time: " & $(ss.variance()) & " millis]", magenta)
-    echo("[standardDeviation time: " & $(ss.standardDeviation()) & " millis], magenta")
+  var idx = 0
+  while not strm.atEnd():
+    let data = strm.readStr(length=chunkSize)
+    let isLast = strm.atEnd()
+    # print colDarkGray, fmt"read: {data.len()} / {strm.getPosition()} data: {data.toHex()[0..min(60,data.len())]}..."
 
+    let res = client.doRpcCall(opts, "fw-write", %* [idx, data, isLast])
+    idx.inc()
+    # print(colSeaGreen, fmt"fw-write got: {$res}")
+    bar.increment()
+    
+  bar.finish()
+    # var call = initRpcCall("fw-", % [])
+    # let res = client.execRpc(1, call, opts)
+  block finish_firmware_uploads:
+    # let res = client.doRpcCall(opts, "fw-finish", %* [{"permanent": permanent}])
+    # print(colSeaGreen, fmt"fw-finish got: {$res}")
+    let res = client.doRpcCall(opts, "fw-upgrade", %* [{"permanent": permanent}])
+    print(colSeaGreen, fmt"fw-upgrade got: {$res}")
+
+  block check_firmware_uploads:
+    let hdr = client.doRpcCall(opts, "fw-header", %* [2])
+    print(colSeaGreen, fmt"fw-hdr got: {$hdr}")
+    let res = client.doRpcCall(opts, "fw-status")
+    print(colSeaGreen, fmt"fw-status got: {$res}")
 
 # runRpc()
-  
+
+when isMainModule:
+  proc argParse(dst: var IpAddress, dfl: IpAddress, a: var ArgcvtParams): bool =
+    try:
+      dst = a.val.parseIpAddress()
+    except CatchableError:
+      return false
+    return true
+
+  proc argHelp(dfl: IpAddress; a: var ArgcvtParams): seq[string] =
+    argHelp($(dfl), a)
+
+  proc argParse(dst: var Port, dfl: Port, a: var ArgcvtParams): bool =
+    try:
+      dst = Port(a.val.parseInt())
+    except CatchableError:
+      return false
+    return true
+  proc argHelp(dfl: Port; a: var ArgcvtParams): seq[string] =
+    argHelp($(dfl), a)
+
+  dispatchMulti([call], [upload])
