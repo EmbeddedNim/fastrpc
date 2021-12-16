@@ -30,51 +30,40 @@ proc sendAllClients*(srv: SocketServerInfo[EchoOpts],
   for (ia, client) in data.knownClients:
     client.sendTo(ia.host, ia.port, msg)
 
-proc echoTcpReadHandler*(srv: SocketServerInfo[EchoOpts],
-                         result: ReadyKey,
-                         sourceClient: Socket,
-                         sourceType: SockType,
-                         data: EchoOpts) =
-
-  var message = sourceClient.recvLine()
-
-  if message == "":
-    raise newException(InetClientDisconnected, "")
-  else:
-    logDebug("received from client:", message)
-    srv.sendAllClients(data, sourceClient, sourceType, message)
-
-proc echoUdpReadHandler*(srv: SocketServerInfo[EchoOpts],
-                         result: ReadyKey,
-                         sourceClient: Socket,
-                         sourceType: SockType,
-                         data: EchoOpts) =
-  
-  var
-    message = newString(1400)
-    address: IpAddress
-    port: Port
-
-  discard sourceClient.recvFrom(message, message.len(), address, port)
-
-  if message == "":
-    raise newException(InetClientDisconnected, "")
-  else:
-    data.knownClients.incl((InetAddress(host: address, port: port), sourceClient))
-    logDebug("received from client:", message)
-
-    srv.sendAllClients(data, sourceClient, sourceType, message)
-
 proc echoReadHandler*(srv: SocketServerInfo[EchoOpts],
                          result: ReadyKey,
                          sourceClient: Socket,
                          sourceType: SockType,
                          data: EchoOpts) =
   logDebug("echoReadHandler:", "sourceClient:", sourceClient.getFd().int, "socktype:", sourceType)
-  if sourceType == SockType.SOCK_STREAM:
-    echoTcpReadHandler(srv, result, sourceClient, sourceType, data)
-  elif sourceType == SockType.SOCK_DGRAM:
-    echoUdpReadHandler(srv, result, sourceClient, sourceType, data)
+  case sourceType:
+  of SockType.SOCK_STREAM:
+    var message = sourceClient.recvLine()
+
+    if message == "":
+      raise newException(InetClientDisconnected, "")
+    else:
+      logDebug("received from client:", message)
+      srv.sendAllClients(data, sourceClient, sourceType, message)
+
+  of SockType.SOCK_DGRAM:
+    var
+      message = newString(1400)
+      address: IpAddress
+      port: Port
+
+    discard sourceClient.recvFrom(message, message.len(), address, port)
+
+    if message == "":
+      raise newException(InetClientDisconnected, "")
+    else:
+      data.knownClients.incl((InetAddress(host: address, port: port), sourceClient))
+      logDebug("received from client:", message)
+
+      srv.sendAllClients(data, sourceClient, sourceType, message)
+  else:
+    raise newException(ValueError, "unhandled socket type: " & $sourceType)
+
   
 proc newEchoServer*(prefix = "", selfEchoDisable = false): SocketServerImpl[EchoOpts] =
   new(result)
