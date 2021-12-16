@@ -38,7 +38,7 @@ proc lengthFromBigendian32*(datasz: string): int32 =
   bigEndian32(addr result, datasz.cstring())
 
 
-template customPacketRpcHandler*(name, rpcExec: untyped): untyped =
+template customPacketRpcHandler*(name, rpcExec: untyped, rpcSerialize: untyped): untyped =
 
   proc `name`*[T](srv: SocketServerInfo[T],
                           result: ReadyKey,
@@ -50,35 +50,34 @@ template customPacketRpcHandler*(name, rpcExec: untyped): untyped =
       host: IpAddress
       port: Port
 
-    proc sendData(sourceClient: Socket, sourceType: SockType, response: string) =
-      # Send network data
-      if sourceType == SockType.SOCK_STREAM:
-        sourceClient.sendSafe(response)
-      elif sourceType == SockType.SOCK_DGRAM:
-        sourceClient.sendTo(host, port, response)
-      else:
-        raise newException(ValueError, "unhandled socket type: " & $sourceType)
-
     logInfo("handle json rpc ")
+    var sender: SocketClientSender
+
     # Get network data
     if sourceType == SockType.SOCK_STREAM:
       discard sourceClient.recv(message, data.bufferSize)
       if message == "":
         raise newException(InetClientDisconnected, "")
+      sender = proc (data: string): bool =
+                sourceClient.sendSafe(data)
+                return true
     elif sourceType == SockType.SOCK_DGRAM:
       discard sourceClient.recvFrom(message, message.len(), host, port)
+      sender = proc (data: string): bool =
+                sourceClient.sendTo(host, port, data)
+                return true
     else:
       raise newException(ValueError, "unhandled socket type: " & $sourceType)
 
     # process rpc
-    var response = `rpcExec`(data.router, message)
+    var response = `rpcExec`(data.router, message, sender)
 
     # send response rpc
     if data.prefixMsgSize:
       var datasz = response.len().lengthBigendian32()
       logDebug("sending prefix msg size: ", repr(datasz))
-      sendData(sourceClient, sourceType, datasz)
+      discard sender(datasz)
 
     logDebug("msg: data: ", repr(response))
-    sendData(sourceClient, sourceType, response)
+    discard sender(response)
 

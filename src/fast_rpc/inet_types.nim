@@ -2,6 +2,9 @@ import nativesockets, net, selectors, posix, tables
 
 export nativesockets, net, selectors, posix, tables
 
+import json
+export json
+
 type
   InetAddress* = object
     # Combined type for a remote IP address and service port
@@ -29,6 +32,8 @@ type
     readHandler*: SocketServerHandler[T]
     writeHandler*: SocketServerHandler[T]
     postProcessHandler*: SocketServerProcessor[T]
+
+  SocketClientSender* = proc (data: string): bool {.closure.}
 
 type 
   InetClientDisconnected* = object of OSError
