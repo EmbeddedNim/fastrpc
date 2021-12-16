@@ -82,14 +82,14 @@ proc execRpc( client: Socket, i: int, call: JsonNode, opts: RpcOptions): JsonNod
       client.send( mcall )
       var msgLenBytes = client.recv(4, timeout = -1)
       var msgLen: int32 = 0
-      # echo grey, "[socket data:lenstr: " & repr(msgLenBytes) & "]"
+      print("[socket data:lenstr: " & repr(msgLenBytes) & "]")
       if msgLenBytes.len() == 0: return
       for i in countdown(3,0):
         msgLen = (msgLen shl 8) or int32(msgLenBytes[i])
 
       var msg = ""
       while msg.len() < msgLen:
-        let mb = client.recv(4*1024, timeout = -1)
+        let mb = client.recv(4096, timeout = -1)
         if not opts.quiet and not opts.noprint:
           print("[read bytes: " & $mb.len() & "]")
         msg.add mb
@@ -137,7 +137,7 @@ proc runRpc(opts: RpcOptions, margs: JsonNode) =
       call[f] = v
 
     let domain = if opts.ipAddr.family == IpAddressFamily.IPv6: Domain.AF_INET6 else: Domain.AF_INET6 
-    let client: Socket = newSocket(buffered=true, domain=domain)
+    let client: Socket = newSocket(buffered=false, domain=domain)
 
     print(colYellow, "[connecting to server ip addr: ", repr opts.ipAddr,"]")
     client.connect($opts.ipAddr, opts.port)
