@@ -24,20 +24,22 @@ type
 
   SubscriptionArgs* = ref object
     subid*: SubId
+    data*: JsonNode
     sender*: SocketClientSender 
     
   SubsTable = TableRef[SubId, Thread[SubscriptionArgs]]
 
 proc newSubscription*(subs: var SubsTable,
                      sender: SocketClientSender,
-                     subsfunc: proc (args: SubscriptionArgs) {.gcsafe, nimcall.}
+                     subsfunc: proc (args: SubscriptionArgs) {.gcsafe, nimcall.},
+                     data: sink JsonNode = % nil
                       ): SubId =
   var subid: SubId
   if urandom(subid.uuid):
     subid.okay = true
 
   subs[subid] = Thread[SubscriptionArgs]()
-  var args = SubscriptionArgs(subid: subid, sender: sender)
+  var args = SubscriptionArgs(subid: subid, data: data, sender: sender)
   createThread(subs[subid], subsfunc, args)
 
   result = subid
@@ -45,7 +47,8 @@ proc newSubscription*(subs: var SubsTable,
 proc run_micros(args: SubscriptionArgs) {.gcsafe.} = 
   var subId = args.subid
   var sender = args.sender
-  echo("micros subs setup")
+  let delay = args.data.getInt()
+  echo("micros subs setup: delay: ", delay)
 
   while true:
     echo "sending mono time: ", "sub: ", $subId, " sender: ", repr(sender)
@@ -56,7 +59,7 @@ proc run_micros(args: SubscriptionArgs) {.gcsafe.} =
 
     let res = sender(msg)
     if not res: break
-    os.sleep(1)
+    os.sleep(delay)
 
 # Define RPC Server #
 proc rpc_server*(): RpcRouter =
@@ -66,9 +69,9 @@ proc rpc_server*(): RpcRouter =
   rpc(rt, "version") do() -> string:
     result = VERSION
 
-  rpc_subscribe(rt, "micros_subscribe") do() -> JsonNode:
-    var subid = subs.newSubscription(context, run_micros)
-    echo("micros subs setup")
+  rpc_subscribe(rt, "micros_subscribe") do(delay: int) -> JsonNode:
+    var subid = subs.newSubscription(context, run_micros, % delay)
+    echo("micros subs called: ", delay)
     result = % subid
 
   rpc(rt, "add") do(a: int, b: int) -> int:
