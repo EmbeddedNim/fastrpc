@@ -91,7 +91,7 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
     if ia.protocol in {Protocol.IPPROTO_TCP}:
       server.listen()
       servers.add(server)
-      events = {Event.Read, Event.Write}
+      events = {Event.Read}
     elif ia.protocol in {Protocol.IPPROTO_UDP}:
       dgramClients.add((server,SOCK_DGRAM,))
       events = {Event.Read}
