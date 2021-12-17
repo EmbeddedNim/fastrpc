@@ -39,6 +39,7 @@ type
   RpcOptions = object
     id: int
     showstats: bool
+    keepalive: bool
     count: int
     delay: int
     jsonArg: string
@@ -148,13 +149,19 @@ proc runRpc(opts: RpcOptions, margs: JsonNode) =
     print(colBlue, "[call: ", $call, "]")
 
     for i in 1..opts.count:
-      discard client.execRpc(i, call, opts)
+      try:
+        discard client.execRpc(i, call, opts)
+      except Exception:
+        print(colRed, "[exception: ", getCurrentExceptionMsg() ,"]")
 
-    while true:
+    while opts.keepalive:
       let mb = client.recv(4096, timeout = -1)
       if mb != "":
-        let res = mb.toJsonNode()
-        print("subscription: ", $res)
+        try:
+          let res = mb.toJsonNode()
+          print("subscription: ", $res)
+        except Exception:
+          print(colRed, "[exception: ", getCurrentExceptionMsg() ,"]")
     client.close()
 
     print("\n")
@@ -187,8 +194,27 @@ proc doRpcCall(client: Socket, opts: var RpcOptions, name: string, args: varargs
   let jargs = % args
   doRpcCall(client, opts, name, jargs)
 
-proc call(ip: IpAddress, cmdargs: seq[string], port=Port(5555), dry_run=false, quiet=false, pretty=false, count=1, delay=0, showstats=false, rawJsonArgs="") =
-  var opts = RpcOptions(count: count, delay: delay, ipAddr: ip, port: port, quiet: quiet, dryRun: dry_run, showstats: showstats, prettyPrint: pretty)
+proc call(ip: IpAddress,
+          cmdargs: seq[string],
+          port=Port(5555),
+          dry_run=false,
+          quiet=false,
+          pretty=false,
+          count=1,
+          delay=0,
+          showstats=false,
+          keepalive=false,
+          rawJsonArgs="") =
+
+  var opts = RpcOptions(count: count,
+                        delay: delay,
+                        ipAddr: ip,
+                        port: port,
+                        quiet: quiet,
+                        dryRun: dry_run,
+                        showstats: showstats,
+                        prettyPrint: pretty,
+                        keepalive: keepalive)
 
   ## Some API call
   let

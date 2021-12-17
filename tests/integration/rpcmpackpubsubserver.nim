@@ -11,17 +11,42 @@ import mcu_utils/logging
 import json
 import fast_rpc/inet_types
 import msgpack4nim/msgpack2json
+import tables
+import sugar
 
 const
   VERSION = "1.0.0"
 
 type
-  Subscription* = object
+  SubId* = object
     uuid*: array[16, byte]
     okay*: bool
 
-proc run_micros(args: (Subscription, SocketClientSender)) {.gcsafe.} = 
-  var (subId, sender) = args
+  SubscriptionArgs* = ref object
+    subid*: SubId
+    sender*: SocketClientSender 
+    
+  SubsTable = TableRef[SubId, Thread[SubscriptionArgs]]
+
+proc newSubscription*(subs: var SubsTable,
+                     sender: SocketClientSender,
+                     subsfunc: proc (args: SubscriptionArgs) {.gcsafe, nimcall.}
+                      ): SubId =
+  var subid: SubId
+  if urandom(subid.uuid):
+    subid.okay = true
+
+  subs[subid] = Thread[SubscriptionArgs]()
+  var args = SubscriptionArgs(subid: subid, sender: sender)
+  createThread(subs[subid], subsfunc, args)
+
+  result = subid
+
+proc run_micros(args: SubscriptionArgs) {.gcsafe.} = 
+  var subId = args.subid
+  var sender = args.sender
+  echo("micros subs setup")
+
   while true:
     echo "sending mono time: ", "sub: ", $subId, " sender: ", repr(sender)
     let a = getMonoTime().ticks()
@@ -35,22 +60,15 @@ proc run_micros(args: (Subscription, SocketClientSender)) {.gcsafe.} =
 # Define RPC Server #
 proc rpc_server*(): RpcRouter =
   var rt = createRpcRouter()
+  var subs = SubsTable()
 
   rpc(rt, "version") do() -> string:
     result = VERSION
 
   rpc(rt, "micros_subscribe") do() -> JsonNode:
-    var subid: Subscription
-    if urandom(subid.uuid):
-      subid.okay = true
-
-    var thr: Thread[(Subscription, SocketClientSender)]
-    var arg = (subid, sender)
-    createThread(thr, run_micros, arg)
-
-    echo("micros subs done")
+    var subid = subs.newSubscription(sender, run_micros)
+    echo("micros subs setup")
     result = % subid
-
 
   rpc(rt, "add") do(a: int, b: int) -> int:
     result = a + b
