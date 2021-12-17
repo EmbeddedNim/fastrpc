@@ -4,6 +4,9 @@ import ../inet_types
 import marshal_json
 
 export marshal_json
+export tables
+export inet_types
+
 ## Code copied from: status-im/nim-json-rpc is licensed under the Apache License 2.0
 
 type
@@ -30,8 +33,16 @@ type
 
   RpcRouter* = ref object
     procs*: Table[string, RpcProc]
-    buffer*: int
 
+  JsonRpcSubId* = object
+    uuid*: array[16, byte]
+    okay*: bool
+
+  JsonRpcSubsArgs* = ref object
+    subid*: JsonRpcSubId
+    data*: JsonNode
+    sender*: SocketClientSender 
+  
 proc wrapResponse*(rpcCall: JsonRpcCall, ret: JsonNode): JsonNode = 
   result = %* {"jsonrpc": "2.0", "result": ret, "id": rpcCall.id}
 

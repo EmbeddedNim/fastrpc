@@ -1,50 +1,18 @@
-import fast_rpc/routers/router_json
+import std/monotimes, std/os, std/json, std/tables
+
 import fast_rpc/socketserver
 import fast_rpc/socketserver/mpack_jrpc_impl
-
-import std/monotimes
-import std/sysrand
-import std/os
+import fast_rpc/routers/threaded_subscriptions
 
 import mcu_utils/logging
 
-import json
 import fast_rpc/inet_types
 import msgpack4nim/msgpack2json
-import tables
-import sugar
 
 const
   VERSION = "1.0.0"
 
-type
-  SubId* = object
-    uuid*: array[16, byte]
-    okay*: bool
-
-  SubscriptionArgs* = ref object
-    subid*: SubId
-    data*: JsonNode
-    sender*: SocketClientSender 
-    
-  SubsTable = TableRef[SubId, Thread[SubscriptionArgs]]
-
-proc newSubscription*(subs: var SubsTable,
-                     sender: SocketClientSender,
-                     subsfunc: proc (args: SubscriptionArgs) {.gcsafe, nimcall.},
-                     data: sink JsonNode = % nil
-                      ): SubId =
-  var subid: SubId
-  if urandom(subid.uuid):
-    subid.okay = true
-
-  subs[subid] = Thread[SubscriptionArgs]()
-  var args = SubscriptionArgs(subid: subid, data: data, sender: sender)
-  createThread(subs[subid], subsfunc, args)
-
-  result = subid
-
-proc run_micros(args: SubscriptionArgs) {.gcsafe.} = 
+proc run_micros(args: JsonRpcSubsArgs) {.gcsafe.} = 
   var subId = args.subid
   var sender = args.sender
   let delay = args.data.getInt()
@@ -64,13 +32,13 @@ proc run_micros(args: SubscriptionArgs) {.gcsafe.} =
 # Define RPC Server #
 proc rpc_server*(): RpcRouter =
   var rt = createRpcRouter()
-  var subs = SubsTable()
+  var subs = JsonRpcSubThreadTable()
 
   rpc(rt, "version") do() -> string:
     result = VERSION
 
   rpc_subscribe(rt, "micros_subscribe") do(delay: int) -> JsonNode:
-    var subid = subs.newSubscription(context, run_micros, % delay)
+    var subid = subs.subscribeWithThread(context, run_micros, % delay)
     echo("micros subs called: ", delay)
     result = % subid
 
