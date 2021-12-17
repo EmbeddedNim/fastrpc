@@ -6,6 +6,8 @@ import std/monotimes
 import std/sysrand
 import std/os
 
+import mcu_utils/logging
+
 import json
 import fast_rpc/inet_types
 import msgpack4nim/msgpack2json
@@ -27,8 +29,12 @@ proc run_micros(args: (Subscription, SocketClientSender)) {.gcsafe.} =
     var value = %* {"subscription": subId, "result": ts}
     var msg: string = value.fromJsonNode()
 
-    let res = sender(msg)
-    if not res: break
+    try:
+      let res = sender(msg)
+      if not res: break
+    except Exception as err:
+      logException(err, "run_micros", lvlError)
+      break
     os.sleep(100)
 
 

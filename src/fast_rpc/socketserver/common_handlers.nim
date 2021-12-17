@@ -1,4 +1,6 @@
 import endians
+import sugar
+
 import mcu_utils/logging
 import ../inet_types
 
@@ -37,6 +39,19 @@ proc lengthFromBigendian32*(datasz: string): int32 =
   result = 0
   bigEndian32(addr result, datasz.cstring())
 
+proc senderClosure*(sourceClient: Socket): SocketClientSender =
+  capture sourceClient:
+    result =
+      proc (data: string): bool =
+        sourceClient.sendSafe(data)
+        return true
+
+proc senderClosure*(sourceClient: Socket, host: IpAddress, port: Port): SocketClientSender =
+  capture sourceClient, host, port:
+    result =
+      proc (data: string): bool =
+        sourceClient.sendTo(host, port, data)
+        return true
 
 template customPacketRpcHandler*(name, rpcExec: untyped, rpcSerialize: untyped): untyped =
 
