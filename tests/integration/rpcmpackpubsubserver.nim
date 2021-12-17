@@ -56,6 +56,7 @@ proc run_micros(args: SubscriptionArgs) {.gcsafe.} =
 
     let res = sender(msg)
     if not res: break
+    os.sleep(1)
 
 # Define RPC Server #
 proc rpc_server*(): RpcRouter =
