@@ -4,11 +4,11 @@ import msgpack4nim/msgpack2json
 
 import mcu_utils/logging
 import ../inet_types
-import ../routers/router_json_pubsub
+import ../routers/router_json
 
 import common_handlers
 
-export router_json_pubsub
+export router_json
 
 type 
   JsonRpcOpts* = ref object

@@ -1,4 +1,4 @@
-import fast_rpc/routers/router_json_pubsub
+import fast_rpc/routers/router_json
 import fast_rpc/socketserver
 import fast_rpc/socketserver/mpack_jrpc_impl
 
@@ -66,8 +66,8 @@ proc rpc_server*(): RpcRouter =
   rpc(rt, "version") do() -> string:
     result = VERSION
 
-  rpc(rt, "micros_subscribe") do() -> JsonNode:
-    var subid = subs.newSubscription(sender, run_micros)
+  rpc_subscribe(rt, "micros_subscribe") do() -> JsonNode:
+    var subid = subs.newSubscription(context, run_micros)
     echo("micros subs setup")
     result = % subid
 
