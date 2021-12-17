@@ -102,7 +102,7 @@ proc execRpc( client: Socket, i: int, call: JsonNode, opts: RpcOptions): JsonNod
     if not opts.quiet and not opts.noprint:
       print colGray, "[read bytes: ", $msg.len(), "]"
       print colBlue, "wazzah"
-      # print colGray, "[read: ", repr(msg), "]"
+      print colGray, "[read: ", repr(msg), "]"
 
     var mnode: JsonNode = 
       when defined(TcpJsonRpcServer):

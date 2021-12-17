@@ -43,15 +43,23 @@ proc senderClosure*(sourceClient: Socket): SocketClientSender =
   capture sourceClient:
     result =
       proc (data: string): bool =
-        sourceClient.sendSafe(data)
-        return true
+        try:
+          sourceClient.sendSafe(data)
+          return true
+        except Exception as err:
+          logException(err, "run_micros", lvlError)
+          return false
 
 proc senderClosure*(sourceClient: Socket, host: IpAddress, port: Port): SocketClientSender =
   capture sourceClient, host, port:
     result =
       proc (data: string): bool =
-        sourceClient.sendTo(host, port, data)
-        return true
+        try:
+          sourceClient.sendTo(host, port, data)
+          return true
+        except Exception as err:
+          logException(err, "run_micros", lvlError)
+          return false
 
 template customPacketRpcHandler*(name, rpcExec: untyped, rpcSerialize: untyped): untyped =
 
@@ -73,14 +81,10 @@ template customPacketRpcHandler*(name, rpcExec: untyped, rpcSerialize: untyped):
       discard sourceClient.recv(message, data.bufferSize)
       if message == "":
         raise newException(InetClientDisconnected, "")
-      sender = proc (data: string): bool =
-                sourceClient.sendSafe(data)
-                return true
+      sender = senderClosure(sourceClient)
     elif sourceType == SockType.SOCK_DGRAM:
       discard sourceClient.recvFrom(message, message.len(), host, port)
-      sender = proc (data: string): bool =
-                sourceClient.sendTo(host, port, data)
-                return true
+      sender = senderClosure(sourceClient, host, port)
     else:
       raise newException(ValueError, "unhandled socket type: " & $sourceType)
 
