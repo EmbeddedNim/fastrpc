@@ -15,6 +15,7 @@ requires "progress >= 0.1.0"
 requires "mcu_utils >= 0.1.0"
 
 task build_integration_tests, "build integration test tools":
+  exec "nim c tests/integration/multicastserver.nim"
   exec "nim c tests/integration/rpcmpackpubsubserver.nim"
   exec "nim c tests/integration/rpcmpackserver.nim"
   exec "nim c tests/integration/rpcmpackcli.nim"

@@ -116,7 +116,6 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
     if serverImpl.postProcessHandler != nil:
       serverImpl.postProcessHandler(srv, results, serverImpl.data)
 
-  
   select.close()
   for server in servers:
     server.close()
