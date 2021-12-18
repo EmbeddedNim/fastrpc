@@ -16,9 +16,9 @@ const
 
 proc multicast_micros(args: JsonRpcSubsArgs) {.gcsafe.} = 
   var subId = args.subid
-  var sender = args.sender
   let delay = args.data.getInt()
   var maddr = parseIpAddress "239.1.1.17"
+  var mport = Port(8904)
 
   echo("multicast micros subs setup: delay: ", delay)
 
@@ -30,18 +30,18 @@ proc multicast_micros(args: JsonRpcSubsArgs) {.gcsafe.} =
   )
   logDebug "socket started:", "fd:", msock.getFd().int
 
-  let grpres = joinGroup(msock, maddr)
+  let grpres = msock.joinGroup(maddr)
+  msock.enableBroadcast(true)
   logDebug "socket joined group:", "maddr:", maddr, "status:", grpres
 
   while true:
-    echo "sending mono time: ", "sub: ", $subId, " sender: ", repr(sender)
+    echo "sending mono time: ", "sub: ", $subId
     let a = getMonoTime().ticks()
     var ts = int(a div 1000)
     var value = %* {"subscription": subId, "result": ts}
     var msg: string = value.fromJsonNode()
 
-    let res = sender(msg)
-    if not res: break
+    msock.sendTo(maddr, mport, msg)
     os.sleep(delay)
 
 proc run_micros(args: JsonRpcSubsArgs) {.gcsafe.} = 
@@ -51,7 +51,7 @@ proc run_micros(args: JsonRpcSubsArgs) {.gcsafe.} =
   echo("micros subs setup: delay: ", delay)
 
   while true:
-    echo "sending mono time: ", "sub: ", $subId, " sender: ", repr(sender)
+    echo "sending mono time: ", "sub: ", $subId
     let a = getMonoTime().ticks()
     var ts = int(a div 1000)
     var value = %* {"subscription": subId, "result": ts}
@@ -86,7 +86,7 @@ when isMainModule:
   ]
 
   var msubid = newJsonRpcSubsId()
-  var margs = JsonRpcSubsArgs(subid: msubid)
+  var margs = JsonRpcSubsArgs(subid: msubid, data: % 1000)
   var mthr: Thread[JsonRpcSubsArgs]
   createThread(mthr, multicast_micros, margs)
 
