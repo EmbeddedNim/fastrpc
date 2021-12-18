@@ -37,7 +37,7 @@ proc rpc_server*(): RpcRouter =
   rpc(rt, "version") do() -> string:
     result = VERSION
 
-  rpc_subscribe(rt, "micros_subscribe") do(delay: int) -> JsonNode:
+  rpc_subscribe(rt, "micros") do(delay: int) -> JsonNode:
     var subid = subs.subscribeWithThread(context, run_micros, % delay)
     echo("micros subs called: ", delay)
     result = % subid

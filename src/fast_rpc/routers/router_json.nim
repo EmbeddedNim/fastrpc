@@ -183,7 +183,7 @@ proc route*(router: RpcRouter,
       result = wrapReplyError(id, error)
       # echo "Error wrap done "
 
-proc makeProcName(s: string): string =
+proc makeProcName(s: string, subscribe: bool): string =
   result = ""
   for c in s:
     if c.isAlphaNumeric: result.add c
@@ -193,7 +193,7 @@ proc hasReturnType(params: NimNode): bool =
      params[0].kind != nnkEmpty:
     result = true
 
-proc genrpc(server: NimNode, doSubscribe: bool, path: NimNode, body: NimNode): NimNode =
+proc genrpc(server: NimNode, isSubscribe: bool, path: NimNode, body: NimNode): NimNode =
   ## Define a remote procedure call.
   ## Input and return parameters are defined using the ``do`` notation.
   ## For example:
@@ -205,20 +205,19 @@ proc genrpc(server: NimNode, doSubscribe: bool, path: NimNode, body: NimNode): N
   ## and output parameters are automatically marshalled to json for transport.
   result = newStmtList()
   let
+    path = $path & (if isSubscribe: "$subscribe" else: "")
     parameters = body.findChild(it.kind == nnkFormalParams)
     # all remote calls have a single parameter: `params: JsonNode`
     paramsIdent = newIdentNode"params"
     # procs are generated from the stripped path
-    pathStr = $path
+    pathStr = $path & (if isSubscribe: "$subscribe" else: "")
     # strip non alphanumeric
-    procNameStr = pathStr.makeProcName
+    procNameStr = pathStr.makeProcName(isSubscribe)
     # public rpc proc
     procName = newIdentNode(procNameStr)
     # when parameters present: proc that contains our rpc body
     doMain = newIdentNode(procNameStr & "DoMain")
-    # async result
-    # res = newIdentNode("result")
-    # errJson = newIdentNode("errJson")
+
   var
     setup = jsonToNim(parameters, paramsIdent)
     procBody = if body.kind == nnkStmtList: body else: body.body
@@ -229,7 +228,7 @@ proc genrpc(server: NimNode, doSubscribe: bool, path: NimNode, body: NimNode): N
   # delegate async proc allows return and setting of result as native type
   let sender = newIdentNode"context"
 
-  if not doSubscribe:
+  if not isSubscribe:
     result.add quote do:
       proc `doMain`(`paramsIdent`: JsonNode): `ReturnType` =
         {.cast(gcsafe).}:
@@ -262,6 +261,7 @@ proc genrpc(server: NimNode, doSubscribe: bool, path: NimNode, body: NimNode): N
         proc `procName`(`paramsIdent`: JsonNode, `sender`: SocketClientSender): JsonNode {.gcsafe.} =
           return %* `doMain`(`paramsIdent`, `sender`)
 
+  echo "PROC_NAME: ", $procName
   result.add quote do:
     `server`.register(`path`, `procName`)
 
