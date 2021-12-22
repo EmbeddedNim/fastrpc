@@ -30,7 +30,7 @@ type
     frUnsupported = 23
     # rtpMax = 23 # numbers less than this store in single mpack/cbor byte
 
-  FastRpcParamsBuffer* = distinct MsgBuffer
+  FastRpcParamsBuffer* = tuple[buf: MsgBuffer]
   FastRpcId* = int
 
   FastRpcRequest* = object
@@ -42,15 +42,19 @@ type
   FastRpcResponse* = object
     kind*: FastRpcType
     id*: int
-    params*: FastRpcParamsBuffer # - we handle params below
+    result*: FastRpcParamsBuffer # - we handle params below
 
-  FastRpcError* = object
-    code: int
-    msg: string
-    stacktrace: seq[string]
+  FastRpcError* = ref object
+    code*: int
+    msg*: string
+
+  FastRpcErrorStackTrace* = object
+    code*: int
+    msg*: string
+    stacktrace*: seq[string]
 
   # Procedure signature accepted as an RPC call by server
-  FastRpcProc* = proc(input: MsgBuffer, context: SocketClientSender): MsgBuffer {.gcsafe.}
+  FastRpcProc* = proc(input: FastRpcParamsBuffer, context: SocketClientSender): FastRpcParamsBuffer {.gcsafe, nimcall.}
 
   FastRpcBindError* = object of ValueError
   FastRpcAddressUnresolvableError* = object of ValueError

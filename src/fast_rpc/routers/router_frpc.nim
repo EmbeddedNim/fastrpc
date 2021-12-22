@@ -1,4 +1,4 @@
-import tables, strutils, macros, options
+import tables, strutils, macros
 import mcu_utils/msgbuffer
 
 import msgpack4nim
@@ -6,23 +6,22 @@ import msgpack4nim
 import protocol_frpc
 export protocol_frpc
 
-
-proc wrapResponse*(req: FastRpcRequest, ret: MsgBuffer): FastRpcResponse = 
+proc wrapResponse*(id: FastRpcId, resp: FastRpcParamsBuffer): FastRpcResponse = 
   result.kind = frResponse
-  result.id = req.id
+  result.id = id
+  result.params = resp
 
-proc wrapError*(req: FastRpcRequest, code: int, message: string): FastRpcResponse = 
+proc wrapResponseError*(id: FastRpcId, err: FastRpcError): FastRpcResponse = 
   result.kind = frError
-  result.id = req.id
-  var err: FastRpcError
+  result.id = id
   var ss = MsgBuffer.init()
   ss.pack(err)
-  result.params = ss
+  result.params = (buf: ss)
 
 proc parseError*(ss: MsgBuffer): FastRpcError = 
   ss.unpack(result)
 
-proc parseParams*(ss: MsgBuffer, val: var T) = 
+proc parseParams*[T](ss: MsgBuffer, val: var T) = 
   ss.unpack(val)
 
 proc createRpcRouter*(): FastRpcRouter =
@@ -38,65 +37,32 @@ proc clear*(router: var FastRpcRouter) =
 proc hasMethod*(router: FastRpcRouter, methodName: string): bool =
   router.procs.hasKey(methodName)
 
-# func isEmpty(node: JsonNode): bool = node.isNil or node.kind == JNull
-when defined(RpcRouterIncludeTraceBack):
-  proc `%`(err: StackTraceEntry): JsonNode =
-    # StackTraceEntry = object
-    # procname*: cstring         ## Name of the proc that is currently executing.
-    # line*: int                 ## Line number of the proc that is currently executing.
-    # filename*: cstring         ## Filename of the proc that is currently executing.
-    let
-      pc: string = $err.procname
-      fl: string = $err.filename
-      ln: int = err.line.int
+proc emptySender(data: string): bool = false
 
-    return %* (procname: pc, line: err.line, filename: fl)
-
-proc wrapError*(code: int, msg: string, id: FastRpcId,
-                data: JsonNode = newJNull(), err: ref Exception = nil): JsonNode {.gcsafe.} =
-  # Create standardised error json
-  result = %* { "code": code, "id": id, "message": escapeJson(msg), "data": data }
-
-  when defined(RpcRouterIncludeTraceBack):
-    if err != nil:
-      result["stacktrace"] = %* err.getStackTraceEntries()
-  
-  echo "Error generated: ", "result: ", result, " id: ", id
-
-when defined(RpcRouterIncludeTraceBack):
-  template wrapException(body: untyped) =
-    try:
-      body
-    except: 
-      let msg = getCurrentExceptionMsg()
-      echo("control server: invalid input: error: ", msg)
-      let resp = rpcInvalidRequest(msg)
-      return resp
-
-
-proc route*(router: RpcRouter, node: JsonNode): JsonNode {.gcsafe.} =
-  ## Assumes correct setup of node
+proc route*(router: FastRpcRouter,
+            req: FastRpcRequest,
+            sender: SocketClientSender = emptySender
+            ): FastRpcResponse {.gcsafe.} =
+  ## Routes and calls the fast rpc
   let
-    methodName = node[methodField].str
-    id = node[idField]
-    rpcProc = router.procs.getOrDefault(methodName)
+    rpcProc = router.procs.getOrDefault(req.procName)
+    id = req.id
+    procName = req.procName
+    params = req.params
 
   if rpcProc.isNil:
     let
-      methodNotFound = %(methodName & " is not a registered RPC method.")
-      error = wrapError(METHOD_NOT_FOUND, "Method not found", id, methodNotFound)
-    result = wrapReplyError(id, error)
+      msg = req.procName & " is not a registered RPC method."
+      err = FastRpcError(code: METHOD_NOT_FOUND, msg: msg)
+    result = wrapResponseError(id, err)
   else:
     try:
-      let jParams = node[paramsField]
-      let res = rpcProc(jParams)
-      result = wrapReply(id, res)
-    except CatchableError as err:
-      # echo "Error occurred within RPC", " methodName: ", methodName, "errorMessage = ", err.msg
-      let error = wrapError(SERVER_ERROR, methodName & " raised an exception",
-                            id, % err.msg[0..<min(err.msg.len(), 128)], err)
-      result = wrapReplyError(id, error)
-      # echo "Error wrap done "
+      let res: FastRpcParamsBuffer = rpcProc(params, sender)
+      result = FastRpcResponse(kind: frResponse, id: id, result: res)
+    except CatchableError:
+      # TODO: fix wrapping exception...
+      let errobj: FastRpcError = nil
+      result = wrapResponseError(id, SERVER_ERROR, procName & " raised an exception", errobj)
 
 proc makeProcName(s: string): string =
   result = ""
