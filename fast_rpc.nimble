@@ -16,6 +16,7 @@ requires "mcu_utils >= 0.1.0"
 requires "msgpack4nim >= 0.3.1"
 
 task build_integration_tests, "build integration test tools":
+  exec "nim c tests/integration/fastrpcserver.nim"
   exec "nim c tests/integration/rpcmpackpubsubserver.nim"
   exec "nim c tests/integration/rpcmpackserver.nim"
   exec "nim c tests/integration/rpcmpackcli.nim"
