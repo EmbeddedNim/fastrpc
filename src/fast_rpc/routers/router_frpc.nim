@@ -1,52 +1,44 @@
-import json, tables, strutils, macros, options
+import tables, strutils, macros, options
+import mcu_utils/msgbuffer
+
+import msgpack4nim
+
+import protocol_frpc
+export protocol_frpc
 
 
-const
-  methodField = "method"
-  paramsField = "params"
-  # jsonRpcField = "jsonrpc"
-  idField = "id"
-  # messageTerminator = "\c\l"
+proc wrapResponse*(req: FastRpcRequest, ret: MsgBuffer): FastRpcResponse = 
+  result.kind = frResponse
+  result.id = req.id
 
-  JSON_PARSE_ERROR* = -32700
-  INVALID_REQUEST* = -32600
-  METHOD_NOT_FOUND* = -32601
-  INVALID_PARAMS* = -32602
-  INTERNAL_ERROR* = -32603
-  SERVER_ERROR* = -32000
+proc wrapError*(req: FastRpcRequest, code: int, message: string): FastRpcResponse = 
+  result.kind = frError
+  result.id = req.id
+  var err: FastRpcError
+  var ss = MsgBuffer.init()
+  ss.pack(err)
+  result.params = ss
 
-  defaultMaxRequestLength* = 1024 * 128
-  jsonErrorMessages*: array[RpcJsonError, (int, string)] =
-    [
-      (JSON_PARSE_ERROR, "Invalid JSON"),
-      (INVALID_REQUEST, "JSON 2.0 required"),
-      (INVALID_REQUEST, "No method requested"),
-      (INVALID_REQUEST, "No id specified"),
-      (INVALID_PARAMS, "No parameters specified"),
-      (INVALID_PARAMS, "Invalid request object")
-    ]
+proc parseError*(ss: MsgBuffer): FastRpcError = 
+  ss.unpack(result)
 
-proc createRpcRouter*(max_buffer: int): RpcRouter =
-  result = new(RpcRouter)
-  result.procs = initTable[string, RpcProc]()
+proc parseParams*(ss: MsgBuffer, val: var T) = 
+  ss.unpack(val)
 
-proc register*(router: var RpcRouter, path: string, call: RpcProc) =
+proc createRpcRouter*(): FastRpcRouter =
+  result = new(FastRpcRouter)
+  result.procs = initTable[string, FastRpcProc]()
+
+proc register*(router: var FastRpcRouter, path: string, call: FastRpcProc) =
   router.procs[path] = call
 
-proc clear*(router: var RpcRouter) = router.procs.clear
+proc clear*(router: var FastRpcRouter) =
+  router.procs.clear
 
-proc hasMethod*(router: RpcRouter, methodName: string): bool = router.procs.hasKey(methodName)
+proc hasMethod*(router: FastRpcRouter, methodName: string): bool =
+  router.procs.hasKey(methodName)
 
 # func isEmpty(node: JsonNode): bool = node.isNil or node.kind == JNull
-
-# Json reply wrappers
-
-proc wrapReply*(id: JsonNode, value: JsonNode): JsonNode =
-  return %* {"jsonrpc":"2.0", "id": id, "result": value}
-
-proc wrapReplyError*(id: JsonNode, error: JsonNode): JsonNode =
-  return %* {"jsonrpc":"2.0", "id": id, "error": error}
-
 when defined(RpcRouterIncludeTraceBack):
   proc `%`(err: StackTraceEntry): JsonNode =
     # StackTraceEntry = object
@@ -60,7 +52,7 @@ when defined(RpcRouterIncludeTraceBack):
 
     return %* (procname: pc, line: err.line, filename: fl)
 
-proc wrapError*(code: int, msg: string, id: JsonNode,
+proc wrapError*(code: int, msg: string, id: FastRpcId,
                 data: JsonNode = newJNull(), err: ref Exception = nil): JsonNode {.gcsafe.} =
   # Create standardised error json
   result = %* { "code": code, "id": id, "message": escapeJson(msg), "data": data }
@@ -143,7 +135,7 @@ macro rpc*(server: RpcRouter, path: string, body: untyped): untyped =
     # res = newIdentNode("result")
     # errJson = newIdentNode("errJson")
   var
-    setup = jsonToNim(parameters, paramsIdent)
+    # setup = jsonToNim(parameters, paramsIdent)
     procBody = if body.kind == nnkStmtList: body else: body.body
 
   let ReturnType = if parameters.hasReturnType: parameters[0]

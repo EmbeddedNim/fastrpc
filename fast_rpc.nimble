@@ -13,6 +13,7 @@ requires "nim >= 1.6.0"
 requires "stew >= 0.1.0"
 requires "progress >= 0.1.0"
 requires "mcu_utils >= 0.1.0"
+requires "msgpack4nim >= 0.3.1"
 
 task build_integration_tests, "build integration test tools":
   exec "nim c tests/integration/rpcmpackpubsubserver.nim"
