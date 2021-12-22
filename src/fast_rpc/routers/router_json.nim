@@ -1,8 +1,12 @@
 import json, tables, strutils, macros, options
+import ../inet_types
 
 import marshal_json
 
 export marshal_json
+export tables
+export inet_types
+
 ## Code copied from: status-im/nim-json-rpc is licensed under the Apache License 2.0
 
 type
@@ -18,7 +22,7 @@ type
   RpcJsonErrorContainer* = tuple[err: RpcJsonError, msg: string]
 
   # Procedure signature accepted as an RPC call by server
-  RpcProc* = proc(input: JsonNode): JsonNode {.gcsafe.}
+  RpcProc* = proc(input: JsonNode, context: SocketClientSender): JsonNode {.gcsafe.}
 
   RpcProcError* = object of ValueError
     code*: int
@@ -29,8 +33,16 @@ type
 
   RpcRouter* = ref object
     procs*: Table[string, RpcProc]
-    buffer*: int
 
+  JsonRpcSubId* = object
+    uuid*: array[16, byte]
+    okay*: bool
+
+  JsonRpcSubsArgs* = ref object
+    subid*: JsonRpcSubId
+    data*: JsonNode
+    sender*: SocketClientSender 
+  
 proc wrapResponse*(rpcCall: JsonRpcCall, ret: JsonNode): JsonNode = 
   result = %* {"jsonrpc": "2.0", "result": ret, "id": rpcCall.id}
 
@@ -88,11 +100,9 @@ const
       (INVALID_PARAMS, "Invalid request object")
     ]
 
-proc createRpcRouter*(max_buffer: int): RpcRouter =
+proc createRpcRouter*(): RpcRouter =
   result = new(RpcRouter)
   result.procs = initTable[string, RpcProc]()
-  result.buffer = max_buffer
-  echo "createRpcRouter: " & $(result.buffer)
 
 proc register*(router: var RpcRouter, path: string, call: RpcProc) =
   router.procs[path] = call
@@ -146,7 +156,10 @@ when defined(RpcRouterIncludeTraceBack):
       return resp
 
 
-proc route*(router: RpcRouter, node: JsonNode): JsonNode {.gcsafe.} =
+proc route*(router: RpcRouter,
+            node: JsonNode,
+            sender: SocketClientSender = proc (data: string): bool = false
+           ): JsonNode {.gcsafe.} =
   ## Assumes correct setup of node
   let
     methodName = node[methodField].str
@@ -161,7 +174,7 @@ proc route*(router: RpcRouter, node: JsonNode): JsonNode {.gcsafe.} =
   else:
     try:
       let jParams = node[paramsField]
-      let res = rpcProc(jParams)
+      let res = rpcProc(jParams, sender)
       result = wrapReply(id, res)
     except CatchableError as err:
       # echo "Error occurred within RPC", " methodName: ", methodName, "errorMessage = ", err.msg
@@ -180,7 +193,7 @@ proc hasReturnType(params: NimNode): bool =
      params[0].kind != nnkEmpty:
     result = true
 
-macro rpc*(server: RpcRouter, path: string, body: untyped): untyped =
+proc genrpc(server: NimNode, doSubscribe: bool, path: NimNode, body: NimNode): NimNode =
   ## Define a remote procedure call.
   ## Input and return parameters are defined using the ``do`` notation.
   ## For example:
@@ -214,25 +227,49 @@ macro rpc*(server: RpcRouter, path: string, body: untyped): untyped =
                    else: ident "JsonNode"
 
   # delegate async proc allows return and setting of result as native type
-  result.add quote do:
-    proc `doMain`(`paramsIdent`: JsonNode): `ReturnType` =
-      {.cast(gcsafe).}:
-        `setup`
-        `procBody`
+  let sender = newIdentNode"context"
 
-  if ReturnType == ident"JsonNode":
-    # `JsonNode` results don't need conversion
+  if not doSubscribe:
     result.add quote do:
-      proc `procName`(`paramsIdent`: JsonNode): JsonNode {.gcsafe.} =
-        return `doMain`(`paramsIdent`)
+      proc `doMain`(`paramsIdent`: JsonNode): `ReturnType` =
+        {.cast(gcsafe).}:
+          `setup`
+          `procBody`
+
+    if ReturnType == ident"JsonNode":
+      # `JsonNode` results don't need conversion
+      result.add quote do:
+        proc `procName`(`paramsIdent`: JsonNode, `sender`: SocketClientSender): JsonNode {.gcsafe.} =
+          return `doMain`(`paramsIdent`)
+    else:
+      result.add quote do:
+        proc `procName`(`paramsIdent`: JsonNode, `sender`: SocketClientSender): JsonNode {.gcsafe.} =
+          return %* `doMain`(`paramsIdent`)
   else:
     result.add quote do:
-      proc `procName`(`paramsIdent`: JsonNode): JsonNode {.gcsafe.} =
-        return %* `doMain`(`paramsIdent`)
+      proc `doMain`(`paramsIdent`: JsonNode, `sender`: SocketClientSender): `ReturnType` =
+        {.cast(gcsafe).}:
+          `setup`
+          `procBody`
 
+    if ReturnType == ident"JsonNode":
+      # `JsonNode` results don't need conversion
+      result.add quote do:
+        proc `procName`(`paramsIdent`: JsonNode, `sender`: SocketClientSender): JsonNode {.gcsafe.} =
+          return `doMain`(`paramsIdent`, `sender`)
+    else:
+      result.add quote do:
+        proc `procName`(`paramsIdent`: JsonNode, `sender`: SocketClientSender): JsonNode {.gcsafe.} =
+          return %* `doMain`(`paramsIdent`, `sender`)
 
   result.add quote do:
     `server`.register(`path`, `procName`)
 
   when defined(nimDumpRpcs):
     echo "\n", pathStr, ": ", result.repr
+
+macro rpc*(server: RpcRouter, path: string, body: untyped): untyped =
+  result = genrpc(server, false, path, body)
+
+macro rpc_subscribe*(server: RpcRouter, path: string, body: untyped): untyped =
+  result = genrpc(server, true, path, body)

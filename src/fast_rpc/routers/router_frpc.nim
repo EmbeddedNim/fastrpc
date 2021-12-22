@@ -29,8 +29,6 @@ const
 proc createRpcRouter*(max_buffer: int): RpcRouter =
   result = new(RpcRouter)
   result.procs = initTable[string, RpcProc]()
-  result.buffer = max_buffer
-  echo "createRpcRouter: " & $(result.buffer)
 
 proc register*(router: var RpcRouter, path: string, call: RpcProc) =
   router.procs[path] = call

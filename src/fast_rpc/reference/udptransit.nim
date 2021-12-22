@@ -15,6 +15,8 @@ import std/sysrand, std/random
 import mcu_utils/logging
 import mcu_utils/msgbuffer
 
+import inet_types
+
 import json
 import msgpack4nim
 import msgpack4nim/msgpack2json
@@ -22,10 +24,6 @@ import msgpack4nim/msgpack2json
 # Splitting up these type definitions since I want to be able to extract this
 # stuff later.
 type
-  Address* = object
-    host*: IpAddress
-    port*: Port
-
   MsgId = uint16
 
   MessageType = enum
@@ -35,7 +33,7 @@ type
     InFlight, Delivered, Failed
 
   Message* = ref object
-    address*: Address
+    InetAddress*: InetAddress
     version*: uint8
     id*: MsgId
     mtype*: MessageType
@@ -63,7 +61,7 @@ type
 
   ReactorClient* = ref object
     reactor*: Reactor
-    address*: Address
+    InetAddress*: InetAddress
 
 proc messageToBytes(message: Message, buf: var MsgBuffer) =
   let mtype = uint8(ord(message.mtype))
@@ -83,7 +81,7 @@ proc messageToBytes(message: Message, buf: var MsgBuffer) =
     buf.write(0xFF.char)
     buf.write(message.data)
 
-proc messageFromBytes(buf: MsgBuffer, address: Address): Message =
+proc messageFromBytes(buf: MsgBuffer, InetAddress: InetAddress): Message =
   result = Message()
   # let verTypeTkl = cast[uint8](buf[idx])
   buf.setPosition(0)
@@ -101,7 +99,7 @@ proc messageFromBytes(buf: MsgBuffer, address: Address): Message =
   if buf.readChar().uint8 == 0xFF:
     result.data = buf.readStrRemaining()
 
-  result.address = address
+  result.InetAddress = InetAddress
 
 proc send*(reactor: Reactor, message: Message) =
   # Queue a packet for sending. 
@@ -121,7 +119,7 @@ proc ack(message: Message): Message =
   result.mtype = MessageType.Ack
   result.token = message.token
   result.data = getMd5(message.data)[0..4]
-  result.address = message.address
+  result.InetAddress = message.InetAddress
 
 proc sendMessages(reactor: Reactor) =
   var nextMessages: seq[Message]
@@ -142,7 +140,7 @@ proc sendMessages(reactor: Reactor) =
 
     var buf = MsgBuffer.init(reactor.settings.maxUdpPacketSize)
     messageToBytes(msg, buf)
-    reactor.socket.sendTo(msg.address.host, msg.address.port, buf.data[0..<buf.pos])
+    reactor.socket.sendTo(msg.InetAddress.host, msg.InetAddress.port, buf.data[0..<buf.pos])
 
     if msg.mtype == MessageType.Con:
       let nextDelay = reactor.settings.baseBackoff * 2 ^ msg.attempt
@@ -184,8 +182,8 @@ proc readMessages(reactor: Reactor) =
         raise e
 
     buf.setPosition(0)
-    let address = Address(host: ripaddr, port: rport)
-    let message = messageFromBytes(buf, address)
+    let InetAddress = InetAddress(host: ripaddr, port: rport)
+    let message = messageFromBytes(buf, InetAddress)
 
     # If this is an ack than match it with any existing sends and move on
     var toDelete: seq[int] = @[]
@@ -253,42 +251,42 @@ proc genToken(): string =
   let bytes = rand(int32.high).int32
   token.addInt(bytes)
 
-proc sendConfirm*(reactor: Reactor, address: Address, data: string): uint16  {.discardable.} =
+proc sendConfirm*(reactor: Reactor, InetAddress: InetAddress, data: string): uint16  {.discardable.} =
   let message     = Message()
   let id          = reactor.getNextId()
   message.mtype   = MessageType.Con
   message.id      = id
   message.token   = genToken()
-  message.address = address
+  message.InetAddress = InetAddress
   message.data    = data
   reactor.send(message)
   return id
 
 proc sendConfirm*(reactor: Reactor, host: IpAddress, port: Port, data: string): uint16 {.discardable.} =
-  let address = Address(host: host, port: port)
-  sendConfirm(reactor, address, data)
+  let InetAddress = InetAddress(host: host, port: port)
+  sendConfirm(reactor, InetAddress, data)
 
-proc sendNonconfirm*(reactor: Reactor, address: Address, data: string): uint16 {.discardable.} =
+proc sendNonconfirm*(reactor: Reactor, InetAddress: InetAddress, data: string): uint16 {.discardable.} =
   let message     = Message()
   let id          = reactor.getNextId()
   message.mtype   = MessageType.Non
   message.id      = id
   message.token   = genToken()
-  message.address = address
+  message.InetAddress = InetAddress
   message.data    = data
   reactor.send(message)
   return id
 
 proc sendNonconfirm*(reactor: Reactor, host: IpAddress, port: Port, data: string): uint16 =
-  let address = Address(host: host, port: port)
-  sendNonconfirm(reactor, address, data)
+  let InetAddress = InetAddress(host: host, port: port)
+  sendNonconfirm(reactor, InetAddress, data)
 
 proc sendConfirm*(client: ReactorClient, data: string): uint16 {.discardable.} =
-  logInfo "send confirm to: ", client.address
-  client.reactor.sendConfirm(client.address, data)
+  logInfo "send confirm to: ", client.InetAddress
+  client.reactor.sendConfirm(client.InetAddress, data)
 
 proc sendNonconfirm*(client: ReactorClient, data: string): uint16 {.discardable.} =
-  client.reactor.sendNonconfirm(client.address, data)
+  client.reactor.sendNonconfirm(client.InetAddress, data)
 
 proc cleanupReactor*(reactor: Reactor) =
   # "cleanup reactor"
@@ -313,7 +311,7 @@ proc initSettings*(
     baseBackoff: retryDuration,
   )
 
-proc initReactor*(address: Address, settings = initSettings()): Reactor =
+proc initReactor*(InetAddress: InetAddress, settings = initSettings()): Reactor =
   new(result, cleanupReactor)
   result.id = 1
   result.socket = newSocket(
@@ -323,8 +321,8 @@ proc initReactor*(address: Address, settings = initSettings()): Reactor =
     buffered = false
   )
   result.socket.getFd().setBlocking(false)
-  logInfo("Reactor: bind socket:", "host:", address.host, "port:", address.port)
-  result.socket.bindAddr(address.port, $address.host)
+  logInfo("Reactor: bind socket:", "host:", InetAddress.host, "port:", InetAddress.port)
+  result.socket.bindAddr(InetAddress.port, $InetAddress.host)
   result.settings = settings
 
   logInfo "Reactor: bound socket:" 
@@ -332,12 +330,12 @@ proc initReactor*(address: Address, settings = initSettings()): Reactor =
   logInfo "random" 
 
 proc initReactor*(host: IpAddress, port: Port, settings = initSettings()): Reactor =
-  result = initReactor(Address(host: host, port: port), settings)
+  result = initReactor(InetAddress(host: host, port: port), settings)
 
-proc createClient*(reactor: Reactor, address: Address): ReactorClient =
+proc createClient*(reactor: Reactor, InetAddress: InetAddress): ReactorClient =
   new(result)
   result.reactor = reactor
-  result.address = address
+  result.InetAddress = InetAddress
 
 # Putting this here for now since its not attached to the underlying transport
 # layer and I want to keep this isolated.
@@ -346,11 +344,11 @@ type
     m: string
     params: seq[string]
 
-let defaultServer = Address(host: IPv4_Any(), port: Port 6310)
+let defaultServer = InetAddress(host: IPv4_Any(), port: Port 6310)
 
 const LogNth = 100
 
-proc runTestServer*(remote: Address, server = defaultServer) =
+proc runTestServer*(remote: InetAddress, server = defaultServer) =
   var
     i = 0
     sendNewMessage = true
@@ -411,7 +409,7 @@ proc runTestServer*(remote: Address, server = defaultServer) =
     when defined(linux):
       sleep(20)
 
-proc runTestClient*(remote: Address, server = defaultServer) =
+proc runTestClient*(remote: InetAddress, server = defaultServer) =
   var
     i = 0
 
@@ -455,8 +453,8 @@ when isMainModule:
   const remotePort {.intdefine.} = 6310
 
   let
-    server = Address(host: parseIpAddress serverIp, port: Port serverPort)
-    remote = Address(host: parseIpAddress remoteIp, port: Port remotePort)
+    server = InetAddress(host: parseIpAddress serverIp, port: Port serverPort)
+    remote = InetAddress(host: parseIpAddress remoteIp, port: Port remotePort)
 
   when defined(UdpServer):
     runTestServer(remote, server=server)
