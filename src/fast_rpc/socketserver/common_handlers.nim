@@ -73,7 +73,6 @@ template customPacketRpcHandler*(name, rpcExec: untyped): untyped =
       host: IpAddress
       port: Port
 
-    logInfo("handle json rpc ")
     var sender: SocketClientSender
 
     # Get network data

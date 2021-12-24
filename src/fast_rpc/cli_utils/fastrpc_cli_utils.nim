@@ -29,7 +29,6 @@ proc print*(color: Color, text: varargs[string]) =
 
   stdout.write text
   stdout.write "\n"
-  # stdout.write "\e[0m\n"
   stdout.setForegroundColor(fgDefault)
   stdout.flushFile()
 
