@@ -17,8 +17,8 @@ const
 proc multicast_micros(args: JsonRpcSubsArgs) {.gcsafe.} = 
   var subId = args.subid
   let delay = args.data.getInt()
-  var maddr = parseIpAddress "239.2.3.4"
-  # var maddr = parseIpAddress "192.168.30.255"
+  # var maddr = parseIpAddress "239.2.3.4"
+  var maddr = parseIpAddress "172.17.255.255"
   var mport = Port(12346)
 
   echo("multicast micros subs setup: delay: ", delay)
@@ -30,10 +30,10 @@ proc multicast_micros(args: JsonRpcSubsArgs) {.gcsafe.} =
   )
   logDebug "socket started:", "fd:", msock.getFd().int
   msock.setSockOpt(OptReuseAddr, true)
+  msock.enableBroadcast(true)
   msock.bindAddr(mport, address = "")
 
   let grpres = msock.joinGroup(maddr)
-  msock.enableBroadcast(true)
   logDebug "socket joined group:", "maddr:", maddr, "status:", grpres
 
   while true:
