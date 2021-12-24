@@ -167,7 +167,7 @@ proc runRpc(opts: RpcOptions, req: FastRpcRequest) =
 
 proc call(ip: IpAddress,
           cmdargs: seq[string],
-          port=Port(5555),
+          port=Port(5656),
           dry_run=false,
           quiet=false,
           pretty=false,
