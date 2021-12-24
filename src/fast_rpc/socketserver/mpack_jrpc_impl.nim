@@ -22,7 +22,7 @@ proc mpackJrpcExec*(rt: RpcRouter, msg: var string, sender: SocketClientSender):
   var res: JsonNode = rt.route(rcall, sender)
   result = res.fromJsonNode()
 
-customPacketRpcHandler(packetMpackJRpcHandler, mpackJrpcExec, fromJsonNode)
+customPacketRpcHandler(packetMpackJRpcHandler, mpackJrpcExec)
 
 proc newMpackJRpcServer*(router: RpcRouter, bufferSize = 1400, prefixMsgSize = false): SocketServerImpl[JsonRpcOpts] =
   new(result)

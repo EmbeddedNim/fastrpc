@@ -80,17 +80,11 @@ proc unpack_type*[ByteStream](s: ByteStream, val: var BinString) =
 
 # pack/unpack MsgBuffer
 proc pack_type*[ByteStream](s: ByteStream, x: FastRpcParamsBuffer) =
-  echo "pack_type: FastRpcParamsBuffer:buf: ", repr s
-  echo "pack_type: FastRpcParamsBuffer:ext: ", repr (x.buf.data.len(), x.buf.pos, EXT_TAG_EMBEDDED_ARGS)
   s.pack_ext(x.buf.data.len(), EXT_TAG_EMBEDDED_ARGS)
   s.write(x.buf.data, x.buf.pos)
-  echo "pack_type: FastRpcParamsBuffer:buf: ", repr s
 
 proc unpack_type*[ByteStream](s: ByteStream, x: var FastRpcParamsBuffer) =
   let (extype, extlen) = s.unpack_ext()
-  echo "unpack_type: FastRpcParamsBuffer:ext: ", repr (extype, extlen)
-  echo "unpack_type: FastRpcParamsBuffer:buf: ", repr s
   var extbody = s.readStr(extlen)
-  echo "unpack_type: FastRpcParamsBuffer:body: ", repr extbody
   x.buf = MsgBuffer.init()
   shallowCopy(x.buf.data, extbody)
