@@ -19,8 +19,7 @@ proc echoUdpReadHandler*(srv: SocketServerInfo[EchoOpts],
     address: IpAddress
     port: Port
 
-  let cnt =
-    sourceClient.recvFrom(message, message.len(), address, port)
+  discard sourceClient.recvFrom(message, message.len(), address, port)
 
   if message == "":
     raise newException(InetClientDisconnected, "")

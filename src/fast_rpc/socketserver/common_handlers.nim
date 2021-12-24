@@ -61,7 +61,7 @@ proc senderClosure*(sourceClient: Socket, host: IpAddress, port: Port): SocketCl
           logException(err, "run_micros", lvlError)
           return false
 
-template customPacketRpcHandler*(name, rpcExec: untyped, rpcSerialize: untyped): untyped =
+template customPacketRpcHandler*(name, rpcExec: untyped): untyped =
 
   proc `name`*[T](srv: SocketServerInfo[T],
                           result: ReadyKey,

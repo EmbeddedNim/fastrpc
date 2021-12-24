@@ -2,6 +2,9 @@ import tables, strutils, macros
 import mcu_utils/msgbuffer
 
 import msgpack4nim
+export msgpack4nim
+
+import msgpack4nim/msgpack2json
 
 import protocol_frpc
 export protocol_frpc
@@ -46,6 +49,8 @@ proc route*(router: FastRpcRouter,
   ## Routes and calls the fast rpc
   let
     rpcProc = router.procs.getOrDefault(req.procName)
+  echo "route: ", repr req
+  let
     id = req.id
     procName = req.procName
     params = req.params
@@ -81,23 +86,23 @@ iterator paramsIter(params: NimNode): tuple[name, ntype: NimNode] =
     for j in 0 ..< arg.len-2:
       yield (arg[j], argType)
 
-# proc mkParamsVars*(paramsIdent, paramsType, params: NimNode): NimNode =
-#   if params.isNil: return
+proc mkParamsVars*(paramsIdent, paramsType, params: NimNode): NimNode =
+  if params.isNil: return
 
-#   result = newStmtList()
-#   var varList = newSeq[NimNode]()
-#   for paramIdent, paramType in paramsIter(params):
-#     varList.add quote do:
-#       var `paramIdent`: `paramType` = `paramsIdent`.`paramIdent`
-#   result.add varList
-#   echo "paramsSetup return:\n", treeRepr result
+  result = newStmtList()
+  var varList = newSeq[NimNode]()
+  for paramid, paramType in paramsIter(params):
+    varList.add quote do:
+      var `paramid`: `paramType` = `paramsIdent`.`paramid`
+  result.add varList
+  # echo "paramsSetup return:\n", treeRepr result
 
 proc mkParamsType*(paramsIdent, paramsType, params: NimNode): NimNode =
   if params.isNil: return
 
   var typObj = quote do:
     type
-      `paramsType`* = object
+      `paramsType` = object
   var recList = newNimNode(nnkRecList)
   for paramIdent, paramType in paramsIter(params):
     # processing multiple variables of one type
@@ -126,17 +131,16 @@ macro rpc*(server: FastRpcRouter, path: string, body: untyped): untyped =
     # public rpc proc
     procName = ident(procNameStr)
     # parameter type name
-    paramsIdent = ident("params")
+    paramsIdent = genSym(nskParam, "args")
     paramTypeName = ident("RpcType_" & procNameStr)
     # when parameters present: proc that contains our rpc body
-    objIdent = ident("paramObj")
+    # objIdent = ident("paramObj")
     doMain = ident(procNameStr & "DoMain")
-    rpcTp2 = ident("RpcType_add2")
     # async result
     # res = newIdentNode("result")
     # errJson = newIdentNode("errJson")
   var
-    # paramSetups = paramsSetup(paramsIdent, paramsType, parameters)
+    paramSetups = mkParamsVars(paramsIdent, paramTypeName, parameters)
     paramTypes = mkParamsType(paramsIdent, paramTypeName, parameters)
     procBody = if body.kind == nnkStmtList: body else: body.body
 
@@ -147,34 +151,34 @@ macro rpc*(server: FastRpcRouter, path: string, body: untyped): untyped =
   result.add quote do:
     `paramTypes`
 
-    proc `doMain`(args: `paramTypeName`, context: SocketClientSender): `ReturnType` =
+    proc `doMain`(`paramsIdent`: `paramTypeName`, context: SocketClientSender): `ReturnType` =
       {.cast(gcsafe).}:
-        # `paramSetups`
-        # `procBody`
-        echo "done"
+        `paramSetups`
+        `procBody`
 
-  if ReturnType == ident"MsgBuffer":
-    # `JsonNode` results don't need conversion
-    result.add quote do:
-      proc `procName`(params: FastRpcParamsBuffer, context: SocketClientSender): FastRpcParamsBuffer {.gcsafe, nimcall.} =
-        # var objs: RpcType_add
-        result = (buf: MsgBuffer())
-  else:
-    result.add quote do:
-      proc `procName`(params: FastRpcParamsBuffer, context: SocketClientSender): FastRpcParamsBuffer {.gcsafe, nimcall.} =
-        var
-          objs: `paramTypeName`
-          ss = params.buf
-        # ss.unpack(objs)
-        let res = `doMain`(objs, context)
-        echo "res: ", repr(res)
-        result = (buf: nil)
+  result.add quote do:
+    proc `procName`(params: FastRpcParamsBuffer,
+                    context: SocketClientSender
+                    ): FastRpcParamsBuffer {.gcsafe, nimcall.} =
+      var obj: `paramTypeName`
+      params.buf.setPosition(0)
+      var js = MsgStream.init(params.buf.data)
+      var jn = js.toJsonNode()
+      echo("JN: ", $jn)
+
+      params.buf.setPosition(0)
+      params.buf.unpack(obj)
+
+      let res = `doMain`(obj, context)
+      var ss = MsgBuffer.init()
+      ss.pack(res)
+      result = (buf: ss)
 
 
   result.add quote do:
     `server`.register(`path`, `procName`)
 
-  when defined(nimDumpRpcs):
-    echo "\n", pathStr, ": ", result.repr
+  # when defined(nimDumpRpcs):
+    # echo "\n", pathStr, ": ", result.repr
 
-  echo "rpc return:\n", treeRepr result
+  echo "rpc return:\n", repr result
