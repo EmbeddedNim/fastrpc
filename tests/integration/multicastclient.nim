@@ -18,7 +18,7 @@ proc listen_multicast_micros*(args: JsonRpcSubsArgs) {.gcsafe.} =
   var subId = args.subid
   var sender = args.sender
   let delay = args.data.getInt()
-  var maddr = parseIpAddress "0.0.0.0"
+  # var maddr = parseIpAddress "239.2.3.4"
   # var mport = Port(8905)
   var mport = Port(12346)
 
@@ -31,7 +31,7 @@ proc listen_multicast_micros*(args: JsonRpcSubsArgs) {.gcsafe.} =
     buffered = false
   )
   msock.setSockOpt(OptReuseAddr, true)
-  msock.bindAddr(mport)
+  msock.bindAddr(mport, address = "")
 
   logDebug "socket started:", "fd:", msock.getFd().int
   let grpres = joinGroup(msock, maddr)
