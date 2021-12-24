@@ -49,8 +49,6 @@ proc route*(router: FastRpcRouter,
   ## Routes and calls the fast rpc
   let
     rpcProc = router.procs.getOrDefault(req.procName)
-  echo "route: ", repr req
-  let
     id = req.id
     procName = req.procName
     params = req.params
@@ -163,10 +161,6 @@ macro rpc*(server: FastRpcRouter, path: string, body: untyped): untyped =
       var obj: `paramTypeName`
       params.buf.setPosition(0)
       var js = MsgStream.init(params.buf.data)
-      var jn = js.toJsonNode()
-      echo("JN: ", $jn)
-
-      params.buf.setPosition(0)
       params.buf.unpack(obj)
 
       let res = `doMain`(obj, context)
