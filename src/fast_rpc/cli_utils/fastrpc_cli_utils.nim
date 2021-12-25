@@ -56,7 +56,7 @@ template timeBlock(n: string, opts: RpcOptions, blk: untyped): untyped =
   blk
 
   let td = getTime() - t0
-  if not opts.noprint:
+  if not opts.quiet and not opts.noprint:
     print colGray, "[took: ", $(td.inMicroseconds().float() / 1e3), " millis]"
   totalCalls.inc()
   totalTime = totalTime + td.inMicroseconds()
@@ -107,7 +107,7 @@ proc execRpc( client: Socket, i: int, call: var FastRpcRequest, opts: RpcOptions
     if not opts.noprint:
       print("")
 
-    if not opts.noprint: 
+    if not opts.quiet and not opts.noprint:
       if opts.prettyPrint:
         print(colAquamarine, pretty(mnode))
       else:
