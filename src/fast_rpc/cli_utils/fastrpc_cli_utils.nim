@@ -82,12 +82,14 @@ proc execRpc( client: Socket, i: int, call: var FastRpcRequest, opts: RpcOptions
       var msgLenBytes = client.recv(4, timeout = -1)
       if msgLenBytes.len() == 0: return
       var msgLen: int32 = msgLenBytes.lengthFromBigendian32()
-      print("[socket data:lenstr: " & repr(msgLenBytes) & "]")
-      print("[socket data:len: " & repr(msgLen) & "]")
+      if not opts.quiet and not opts.noprint:
+        print("[socket data:lenstr: " & repr(msgLenBytes) & "]")
+        print("[socket data:len: " & repr(msgLen) & "]")
 
       var msg = ""
       while msg.len() < msgLen:
-        print("[reading msg]")
+        if not opts.quiet and not opts.noprint:
+          print("[reading msg]")
         let mb = client.recv(4096, timeout = -1)
         if not opts.quiet and not opts.noprint:
           print("[read bytes: " & $mb.len() & "]")
