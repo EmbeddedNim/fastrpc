@@ -46,26 +46,28 @@ proc route*(router: FastRpcRouter,
             req: FastRpcRequest,
             sender: SocketClientSender = emptySender
             ): FastRpcResponse {.gcsafe.} =
-  ## Routes and calls the fast rpc
-  let
-    rpcProc = router.procs.getOrDefault(req.procName)
-    id = req.id
-    procName = req.procName
-    params = req.params
+  dumpAllocstats:
+    block:
+      ## Routes and calls the fast rpc
+      let
+        rpcProc = router.procs.getOrDefault(req.procName)
+        id = req.id
+        procName = req.procName
+        params = req.params
 
-  if rpcProc.isNil:
-    let
-      msg = req.procName & " is not a registered RPC method."
-      err = FastRpcError(code: METHOD_NOT_FOUND, msg: msg)
-    result = wrapResponseError(id, err)
-  else:
-    try:
-      let res: FastRpcParamsBuffer = rpcProc(params, sender)
-      result = FastRpcResponse(kind: frResponse, id: id, result: res)
-    except CatchableError:
-      # TODO: fix wrapping exception...
-      let errobj = FastRpcError(code: SERVER_ERROR, msg: procName & " raised an exception")
-      result = wrapResponseError(id, errobj)
+      if rpcProc.isNil:
+        let
+          msg = req.procName & " is not a registered RPC method."
+          err = FastRpcError(code: METHOD_NOT_FOUND, msg: msg)
+        result = wrapResponseError(id, err)
+      else:
+        try:
+          let res: FastRpcParamsBuffer = rpcProc(params, sender)
+          result = FastRpcResponse(kind: frResponse, id: id, result: res)
+        except CatchableError:
+          # TODO: fix wrapping exception...
+          let errobj = FastRpcError(code: SERVER_ERROR, msg: procName & " raised an exception")
+          result = wrapResponseError(id, errobj)
 
 proc makeProcName(s: string): string =
   result = ""

@@ -161,27 +161,29 @@ proc route*(router: RpcRouter,
             sender: SocketClientSender = proc (data: string): bool = false
            ): JsonNode {.gcsafe.} =
   ## Assumes correct setup of node
-  let
-    methodName = node[methodField].str
-    id = node[idField]
-    rpcProc = router.procs.getOrDefault(methodName)
+  dumpAllocstats:
+    block:
+      let
+        methodName = node[methodField].str
+        id = node[idField]
+        rpcProc = router.procs.getOrDefault(methodName)
 
-  if rpcProc.isNil:
-    let
-      methodNotFound = %(methodName & " is not a registered RPC method.")
-      error = wrapError(METHOD_NOT_FOUND, "Method not found", id, methodNotFound)
-    result = wrapReplyError(id, error)
-  else:
-    try:
-      let jParams = node[paramsField]
-      let res = rpcProc(jParams, sender)
-      result = wrapReply(id, res)
-    except CatchableError as err:
-      # echo "Error occurred within RPC", " methodName: ", methodName, "errorMessage = ", err.msg
-      let error = wrapError(SERVER_ERROR, methodName & " raised an exception",
-                            id, % err.msg[0..<min(err.msg.len(), 128)], err)
-      result = wrapReplyError(id, error)
-      # echo "Error wrap done "
+      if rpcProc.isNil:
+        let
+          methodNotFound = %(methodName & " is not a registered RPC method.")
+          error = wrapError(METHOD_NOT_FOUND, "Method not found", id, methodNotFound)
+        result = wrapReplyError(id, error)
+      else:
+        try:
+          let jParams = node[paramsField]
+          let res = rpcProc(jParams, sender)
+          result = wrapReply(id, res)
+        except CatchableError as err:
+          # echo "Error occurred within RPC", " methodName: ", methodName, "errorMessage = ", err.msg
+          let error = wrapError(SERVER_ERROR, methodName & " raised an exception",
+                                id, % err.msg[0..<min(err.msg.len(), 128)], err)
+          result = wrapReplyError(id, error)
+          # echo "Error wrap done "
 
 proc makeProcName(s: string): string =
   result = ""
