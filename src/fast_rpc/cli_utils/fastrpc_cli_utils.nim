@@ -104,7 +104,7 @@ proc execRpc( client: Socket, i: int, call: var FastRpcRequest, opts: RpcOptions
 
     var mnode: JsonNode = msg.toJsonNode()
 
-    if not opts.noprint:
+    if not opts.quiet and not opts.noprint:
       print("")
 
     if not opts.quiet and not opts.noprint:
