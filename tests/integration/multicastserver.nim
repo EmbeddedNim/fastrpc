@@ -30,12 +30,11 @@ proc multicast_micros(args: JsonRpcSubsArgs) {.gcsafe.} =
   )
   logDebug "socket started:", "fd:", msock.getFd().int
   msock.setSockOpt(OptReuseAddr, true)
-  # msock.bindAddr(mport, address = "172.17.0.2")
-  msock.bindAddr(mport, address = "")
+  msock.enableBroadcast(true)
+  msock.bindAddr(mport, address = $maddr)
 
 
   let grpres = msock.joinGroup(maddr)
-  msock.enableBroadcast(true)
   logDebug "socket joined group:", "maddr:", maddr, "status:", grpres
 
   while true:
