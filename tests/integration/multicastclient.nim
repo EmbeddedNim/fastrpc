@@ -31,12 +31,12 @@ proc listen_multicast_micros*(args: JsonRpcSubsArgs) {.gcsafe.} =
     buffered = false
   )
   msock.setSockOpt(OptReuseAddr, true)
-  msock.bindAddr(mport, address = $INADDR_BROADCAST)
+  msock.enableBroadcast(true)
+  msock.bindAddr(mport, address = $maddr)
 
   logDebug "socket started:", "fd:", msock.getFd().int
   # let grpres = joinGroup(msock, maddr)
   # logDebug "socket joined group:", "maddr:", maddr, "status:", grpres
-  msock.enableBroadcast(true)
 
   while true:
     echo "reading mono time: ", "sub: ", $subId

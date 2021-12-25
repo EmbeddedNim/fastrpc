@@ -31,11 +31,10 @@ proc multicast_micros(args: JsonRpcSubsArgs) {.gcsafe.} =
   logDebug "socket started:", "fd:", msock.getFd().int
   msock.setSockOpt(OptReuseAddr, true)
   msock.enableBroadcast(true)
-  msock.bindAddr(mport, address = $maddr)
+  msock.bindAddr(mport, address = "")
 
-
-  let grpres = msock.joinGroup(maddr)
-  logDebug "socket joined group:", "maddr:", maddr, "status:", grpres
+  # let grpres = msock.joinGroup(maddr)
+  # logDebug "socket joined group:", "maddr:", maddr, "status:", grpres
 
   while true:
     echo "sending mono time: ", "sub: ", $subId
