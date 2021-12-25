@@ -86,8 +86,9 @@ proc execRpc( client: Socket, i: int, call: JsonNode, opts: RpcOptions): JsonNod
       var msgLenBytes = client.recv(4, timeout = -1)
       if msgLenBytes.len() == 0: return
       var msgLen: int32 = msgLenBytes.lengthFromBigendian32()
-      print("[socket data:lenstr: " & repr(msgLenBytes) & "]")
-      print("[socket data:len: " & repr(msgLen) & "]")
+      if not opts.quiet and not opts.noprint:
+        print("[socket data:lenstr: " & repr(msgLenBytes) & "]")
+        print("[socket data:len: " & repr(msgLen) & "]")
 
       var msg = ""
       while msg.len() < msgLen:
@@ -110,10 +111,10 @@ proc execRpc( client: Socket, i: int, call: JsonNode, opts: RpcOptions): JsonNod
       else:
         msg.toJsonNode()
 
-    if not opts.noprint:
+    if not opts.quiet and not opts.noprint:
       print("")
 
-    if not opts.noprint: 
+    if not opts.quiet and not opts.noprint:
       if opts.prettyPrint:
         print(colAquamarine, pretty(mnode))
       else:
