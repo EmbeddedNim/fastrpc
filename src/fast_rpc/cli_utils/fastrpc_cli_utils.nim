@@ -15,6 +15,7 @@ from cligen/argcvt import ArgcvtParams, argKeys         # Little helpers
 
 import msgpack4nim
 import msgpack4nim/msgpack2json
+
 import fast_rpc/socketserver/common_handlers
 import fast_rpc/routers/protocol_frpc
 
@@ -78,13 +79,21 @@ proc execRpc( client: Socket, i: int, call: var FastRpcRequest, opts: RpcOptions
     let mcall = ss.data
 
     timeBlock("call", opts):
-      client.send( mcall )
-      var msgLenBytes = client.recv(4, timeout = -1)
-      if msgLenBytes.len() == 0: return
-      var msgLen: int32 = msgLenBytes.lengthFromBigendian32()
+      let msz = mcall.len().int16.lengthBigendian16()
       if not opts.quiet and not opts.noprint:
-        print("[socket data:lenstr: " & repr(msgLenBytes) & "]")
-        print("[socket data:len: " & repr(msgLen) & "]")
+        print("[socket mcall bytes: " & repr(mcall.len()) & "]")
+        print("[socket mcall bytes:lenprefix: " & repr msz & "]")
+      # client.send( msz )
+      client.send( msz & mcall )
+
+      var msgLenBytes = client.recv(2, timeout = 10)
+      if msgLenBytes.len() == 0:
+        print("[socket read: 0, return]")
+        return
+      var msgLen: int16 = msgLenBytes.lengthFromBigendian16()
+      if not opts.quiet and not opts.noprint:
+        print("[socket read:data:lenstr: " & repr(msgLenBytes) & "]")
+        print("[socket read:data:len: " & repr(msgLen) & "]")
 
       var msg = ""
       while msg.len() < msgLen:
@@ -102,12 +111,19 @@ proc execRpc( client: Socket, i: int, call: var FastRpcRequest, opts: RpcOptions
       print colGray, "[read bytes: ", $msg.len(), "]"
       print colGray, "[read: ", repr(msg), "]"
 
-    var mnode: JsonNode = msg.toJsonNode()
+    # var mnode: JsonNode = msg.toJsonNode()
+    # var mres: JsonNode = mnode[3]
+    var rbuff = MsgBuffer.init(msg)
+    var response: FastRpcResponse
+    rbuff.unpack(response)
+    var resbuf = MsgStream.init(response.result.buf.data)
+    var mnode = resbuf.toJsonNode()
 
     if not opts.quiet and not opts.noprint:
       print("")
 
     if not opts.quiet and not opts.noprint:
+      print(colAquamarine, repr response)
       if opts.prettyPrint:
         print(colAquamarine, pretty(mnode))
       else:

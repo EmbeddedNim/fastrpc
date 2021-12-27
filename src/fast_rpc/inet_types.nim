@@ -14,6 +14,7 @@ type
     socktype*: net.SockType
 
   SocketServerInfo*[T] = ref object 
+    ## Represents type for the select/epoll based socket server
     select*: Selector[T]
     servers*: ref Table[SocketHandle, Socket]
     clients*: ref Table[SocketHandle, (Socket, SockType)]

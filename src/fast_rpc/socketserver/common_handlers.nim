@@ -39,15 +39,27 @@ proc lengthFromBigendian32*(datasz: string): int32 =
   result = 0
   bigEndian32(addr result, datasz.cstring())
 
+proc lengthBigendian16*(ln: int16): string =
+  var sz: int32 = ln.int16
+  result = newString(2)
+  bigEndian16(result.cstring(), addr sz)
+
+proc lengthFromBigendian16*(datasz: string): int16 =
+  assert datasz.len() >= 2
+  result = 0
+  bigEndian16(addr result, datasz.cstring())
+
 proc senderClosure*(sourceClient: Socket): SocketClientSender =
   capture sourceClient:
     result =
       proc (data: string): bool =
         try:
-          sourceClient.sendSafe(data)
+          var datasz = data.len().int16.lengthBigendian16()
+          logDebug("sending prefix msg size: ", repr(datasz))
+          sourceClient.sendSafe(datasz & data)
           return true
         except Exception as err:
-          logException(err, "run_micros", lvlError)
+          logException(err, "socker sender:", lvlError)
           return false
 
 proc senderClosure*(sourceClient: Socket, host: IpAddress, port: Port): SocketClientSender =
@@ -58,7 +70,7 @@ proc senderClosure*(sourceClient: Socket, host: IpAddress, port: Port): SocketCl
           sourceClient.sendTo(host, port, data)
           return true
         except Exception as err:
-          logException(err, "run_micros", lvlError)
+          logException(err, "socket sender:", lvlError)
           return false
 
 template customPacketRpcHandler*(name, rpcExec: untyped): untyped =
@@ -69,32 +81,31 @@ template customPacketRpcHandler*(name, rpcExec: untyped): untyped =
                           sourceType: SockType,
                           data: T) =
     var
-      message = newString(data.bufferSize)
+      buffer = MsgBuffer.init(data.bufferSize)
       host: IpAddress
       port: Port
 
+    buffer.setPosition(0)
     var sender: SocketClientSender
 
     # Get network data
     if sourceType == SockType.SOCK_STREAM:
-      discard sourceClient.recv(message, data.bufferSize)
-      if message == "":
+      discard sourceClient.recv(buffer.data, data.bufferSize)
+      if buffer.data == "":
         raise newException(InetClientDisconnected, "")
+      let
+        msglen = buffer.readStr(2).lengthFromBigendian16()
+      if buffer.data.len() != 2 + msglen:
+        raise newException(OSError, "invalid length: read: " & $buffer.data.len() & " expect: " & $(2 + msglen))
       sender = senderClosure(sourceClient)
     elif sourceType == SockType.SOCK_DGRAM:
-      discard sourceClient.recvFrom(message, message.len(), host, port)
+      discard sourceClient.recvFrom(buffer.data, buffer.data.len(), host, port)
       sender = senderClosure(sourceClient, host, port)
     else:
       raise newException(ValueError, "unhandled socket type: " & $sourceType)
 
     # process rpc
-    var response = `rpcExec`(data.router, message, sender)
-
-    # send response rpc
-    if data.prefixMsgSize:
-      var datasz = response.len().lengthBigendian32()
-      logDebug("sending prefix msg size: ", repr(datasz))
-      discard sender(datasz)
+    var response = `rpcExec`(data.router, move buffer, sender)
 
     logDebug("msg: data: ", repr(response))
     discard sender(response)

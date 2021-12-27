@@ -17,13 +17,13 @@ type
     prefixMsgSize*: bool
 
 proc fastRpcExec*(rt: FastRpcRouter,
-                  msg: var string,
+                  ss: sink MsgBuffer,
                   sender: SocketClientSender
                   ): string =
   logDebug("msgpack processing")
-  var ss = MsgBuffer.init(msg)
   var rcall: FastRpcRequest
   ss.unpack(rcall)
+  logDebug("msgpack rcall:", rcall)
   var res: FastRpcResponse = rt.route(rcall, sender)
   var so = MsgBuffer.init(res.result.buf.data.len() + 100)
   so.pack(res)
