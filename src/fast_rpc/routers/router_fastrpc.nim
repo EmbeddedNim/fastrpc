@@ -9,80 +9,6 @@ import msgpack4nim/msgpack2json
 import protocol_frpc
 export protocol_frpc
 
-proc wrapResponse*(id: FastRpcId, resp: FastRpcParamsBuffer): FastRpcResponse = 
-  result.kind = frResponse
-  result.id = id
-  result.result = resp
-
-proc wrapResponseError*(id: FastRpcId, err: FastRpcError): FastRpcResponse = 
-  result.kind = frError
-  result.id = id
-  var ss = MsgBuffer.init()
-  ss.pack(err)
-  result.result = (buf: ss)
-
-proc parseError*(ss: MsgBuffer): FastRpcError = 
-  ss.unpack(result)
-
-proc parseParams*[T](ss: MsgBuffer, val: var T) = 
-  ss.unpack(val)
-
-proc createRpcRouter*(): FastRpcRouter =
-  result = new(FastRpcRouter)
-  result.procs = initTable[string, FastRpcProc]()
-
-proc register*(router: var FastRpcRouter, path: string, call: FastRpcProc) =
-  router.procs[path] = call
-  echo "registering: ", path
-
-proc register*(router: var FastRpcRouter, path: string, call: FastRpcSysProc) =
-  router.sysprocs[path] = call
-  echo "registering: sys: ", path
-
-proc clear*(router: var FastRpcRouter) =
-  router.procs.clear
-
-proc hasMethod*(router: FastRpcRouter, methodName: string): bool =
-  router.procs.hasKey(methodName)
-
-proc emptySender(data: string): bool = false
-
-proc route*(router: FastRpcRouter,
-            req: FastRpcRequest,
-            sender: SocketClientSender = emptySender
-            ): FastRpcResponse {.gcsafe.} =
-  dumpAllocstats:
-    block:
-      ## Routes and calls the fast rpc
-      let rpcProc = 
-        if req.kind == frRequest:
-          router.procs.getOrDefault(req.procName)
-        # elif req.kind == frSystemRequest:
-          # router.sysprocs.getOrDefault(req.procName)
-        else:
-          nil
-
-      if req.kind == frRequest and rpcProc.isNil:
-        let
-          msg = req.procName & " is not a registered RPC method."
-          err = FastRpcError(code: METHOD_NOT_FOUND, msg: msg)
-        result = wrapResponseError(req.id, err)
-      else:
-        try:
-          let res: FastRpcParamsBuffer = rpcProc(req.params, sender)
-          result = FastRpcResponse(kind: frResponse, id: req.id, result: res)
-        except ObjectConversionDefect as err:
-          var errobj = FastRpcError(code: INVALID_PARAMS, msg: req.procName & " raised an exception")
-          if router.stacktraces:
-            errobj.trace = err.getStackTraceEntries()
-          result = wrapResponseError(req.id, errobj)
-        except CatchableError as err:
-          # TODO: fix wrapping exception...
-          let errobj = FastRpcError(code: SERVER_ERROR, msg: req.procName & " raised an exception")
-          if router.stacktraces:
-            errobj.trace = err.getStackTraceEntries()
-          result = wrapResponseError(req.id, errobj)
-
 proc makeProcName(s: string): string =
   result = ""
   for c in s:
@@ -125,12 +51,89 @@ proc mkParamsType*(paramsIdent, paramsType, params: NimNode): NimNode =
   result = typObj
   # echo "paramsParser return:\n", treeRepr result
 
-template rpc_methods*(name, blk: untyped): untyped =
-  proc `name`*(router {.inject.}: var FastRpcRouter  ) =
-    blk
-  proc `name`*(): FastRpcRouter =
-    result = newFastRpcRouter()
-    `name`(result)
+proc wrapResponse*(id: FastRpcId, resp: FastRpcParamsBuffer): FastRpcResponse = 
+  result.kind = frResponse
+  result.id = id
+  result.result = resp
+
+proc wrapResponseError*(id: FastRpcId, err: FastRpcError): FastRpcResponse = 
+  result.kind = frError
+  result.id = id
+  var ss = MsgBuffer.init()
+  ss.pack(err)
+  result.result = (buf: ss)
+
+proc parseError*(ss: MsgBuffer): FastRpcError = 
+  ss.unpack(result)
+
+proc parseParams*[T](ss: MsgBuffer, val: var T) = 
+  ss.unpack(val)
+
+proc createRpcRouter*(): FastRpcRouter =
+  result = new(FastRpcRouter)
+  result.procs = initTable[string, FastRpcProc]()
+
+proc register*(router: var FastRpcRouter, path: string, call: FastRpcProc) =
+  router.procs[path] = call
+  echo "registering: ", path
+
+proc register*(router: var FastRpcRouter, path: string, call: FastRpcSysProc) =
+  router.sysprocs[path] = call
+  echo "registering: sys: ", path
+
+proc clear*(router: var FastRpcRouter) =
+  router.procs.clear
+
+proc hasMethod*(router: FastRpcRouter, methodName: string): bool =
+  router.procs.hasKey(methodName)
+
+proc emptySender(data: string): bool = false
+
+proc handleRoute*[P](
+            rpcProc: P,
+            router: FastRpcRouter,
+            req: FastRpcRequest,
+            sender: SocketClientSender = emptySender
+            ): FastRpcResponse {.gcsafe.} =
+
+      if rpcProc.isNil:
+        let
+          msg = req.procName & " is not a registered RPC method."
+          err = FastRpcError(code: METHOD_NOT_FOUND, msg: msg)
+        result = wrapResponseError(req.id, err)
+      else:
+        try:
+          when typeof(rpcProc) is FastRpcSysProc:
+            let ctx = RpcSystemContext(sender: sender, router: router)
+            let res: FastRpcParamsBuffer = rpcProc(req.params, ctx)
+          else:
+            let res: FastRpcParamsBuffer = rpcProc(req.params, sender)
+          result = FastRpcResponse(kind: frResponse, id: req.id, result: res)
+        except ObjectConversionDefect as err:
+          var errobj = FastRpcError(code: INVALID_PARAMS, msg: req.procName & " raised an exception")
+          if router.stacktraces:
+            errobj.trace = err.getStackTraceEntries()
+          result = wrapResponseError(req.id, errobj)
+        except CatchableError as err:
+          # TODO: fix wrapping exception...
+          let errobj = FastRpcError(code: SERVER_ERROR, msg: req.procName & " raised an exception")
+          if router.stacktraces:
+            errobj.trace = err.getStackTraceEntries()
+          result = wrapResponseError(req.id, errobj)
+
+proc route*(router: FastRpcRouter,
+            req: FastRpcRequest,
+            sender: SocketClientSender = emptySender
+            ): FastRpcResponse {.gcsafe.} =
+  dumpAllocstats:
+    if req.kind == frRequest:
+      let rpcProc = router.procs.getOrDefault(req.procName)
+      result = rpcProc.handleRoute(router, req, sender)
+    elif req.kind == frSystemRequest:
+      let rpcProc = router.sysprocs.getOrDefault(req.procName)
+      result = rpcProc.handleRoute(router, req, sender)
+
+# Define RPC Server #
 
 macro rpc*(p: untyped): untyped =
   ## Define a remote procedure call.
@@ -162,6 +165,7 @@ macro rpc*(p: untyped): untyped =
     procNameStr = pathStr.makeProcName
     # public rpc proc
     procName = ident(procNameStr)
+    ctxName = ident("context")
     # parameter type name
     paramsIdent = genSym(nskParam, "args")
     paramTypeName = ident("RpcType_" & procNameStr)
@@ -186,7 +190,7 @@ macro rpc*(p: untyped): untyped =
     `paramTypes`
 
     proc `procName`(`paramsIdent`: `paramTypeName`,
-                  context: `ContextType`): `ReturnType` =
+                  `ctxName`: `ContextType`): `ReturnType` =
       {.cast(gcsafe).}:
         `paramSetups`
         `procBody`
@@ -210,3 +214,19 @@ macro rpc*(p: untyped): untyped =
   # when defined(nimDumpRpcs):
     # echo "\n", pathStr, ": ", result.repr
   echo "rpc return:\n", repr result
+
+proc addStandardSyscalls*(router: var FastRpcRouter) =
+
+  proc listall(): seq[string] {.rpc, system.} =
+    let rt = context.router
+    result = newSeqOfCap[string](rt.sysprocs.len())
+    for name in rt.sysprocs.keys():
+      result.add name
+
+template rpc_methods*(name, blk: untyped): untyped =
+  proc `name`*(router {.inject.}: var FastRpcRouter  ) =
+    blk
+    router.addStandardSysCalls()
+  proc `name`*(): FastRpcRouter =
+    result = newFastRpcRouter()
+    `name`(result)

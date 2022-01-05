@@ -78,6 +78,7 @@ type
 
   RpcSystemContext* = ref object
     sender*: SocketClientSender
+    router*: FastRpcRouter
 
   BinString* = distinct string
 
