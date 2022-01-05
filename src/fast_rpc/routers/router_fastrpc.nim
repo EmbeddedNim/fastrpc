@@ -112,26 +112,12 @@ proc mkParamsType*(paramsIdent, paramsType, params: NimNode): NimNode =
   result = typObj
   # echo "paramsParser return:\n", treeRepr result
 
-macro create_rpc_setup*(name: untyped, calls: static[FastRpcRouter]): untyped =
-  echo "create_rpc: ", name
-  var setup = newStmtList()
-  var rname = ident($name)
-
-  for k,v in calls.procs:
-    echo "create_rpc: key: ", k
-    setup.add quote do:
-      result.register(`k`, `v`)
-
-  result = newStmtList()
-  result.add quote do:
-    proc `name`*(): FastRpcRouter =
-      result = newFastRpcRouter()
-      `setup`
-
 template rpc_methods*(name, blk: untyped): untyped =
-  proc `name`(): FastRpcRouter =
-    result = newFastRpcRouter()
+  proc `name`*(router {.inject.}: var FastRpcRouter  ) =
     blk
+  proc `name`*(): FastRpcRouter =
+    result = newFastRpcRouter()
+    `name`(result)
 
 macro rpc*(p: untyped): untyped =
   ## Define a remote procedure call.
@@ -199,7 +185,7 @@ macro rpc*(p: untyped): untyped =
       result = (buf: ss)
 
   result.add quote do:
-    result.register(`path`, `procName`)
+    router.register(`path`, `procName`)
 
   # when defined(nimDumpRpcs):
     # echo "\n", pathStr, ": ", result.repr

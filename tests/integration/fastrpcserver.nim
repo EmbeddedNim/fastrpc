@@ -35,7 +35,9 @@ when isMainModule:
   ]
 
   echo "main: ROUTER: "
-  var router = rpcExample()
+  var router = newFastRpcRouter()
+  # var router = rpcExample()
+  rpcExample(router)
   for rpc in router.procs.keys():
     echo "  rpc: ", rpc
   startSocketServer(inetAddrs, newFastRpcServer(router, prefixMsgSize=true))
