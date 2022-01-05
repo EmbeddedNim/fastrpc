@@ -52,30 +52,27 @@ proc route*(router: FastRpcRouter,
       ## Routes and calls the fast rpc
       let
         rpcProc = router.procs.getOrDefault(req.procName)
-        id = req.id
-        procName = req.procName
-        params = req.params
 
       if rpcProc.isNil:
         let
           msg = req.procName & " is not a registered RPC method."
           err = FastRpcError(code: METHOD_NOT_FOUND, msg: msg)
-        result = wrapResponseError(id, err)
+        result = wrapResponseError(req.id, err)
       else:
         try:
-          let res: FastRpcParamsBuffer = rpcProc(params, sender)
-          result = FastRpcResponse(kind: frResponse, id: id, result: res)
+          let res: FastRpcParamsBuffer = rpcProc(req.params, sender)
+          result = FastRpcResponse(kind: frResponse, id: req.id, result: res)
         except ObjectConversionDefect as err:
-          var errobj = FastRpcError(code: INVALID_PARAMS, msg: procName & " raised an exception")
+          var errobj = FastRpcError(code: INVALID_PARAMS, msg: req.procName & " raised an exception")
           if router.stacktraces:
             errobj.trace = err.getStackTraceEntries()
-          result = wrapResponseError(id, errobj)
+          result = wrapResponseError(req.id, errobj)
         except CatchableError as err:
           # TODO: fix wrapping exception...
-          let errobj = FastRpcError(code: SERVER_ERROR, msg: procName & " raised an exception")
+          let errobj = FastRpcError(code: SERVER_ERROR, msg: req.procName & " raised an exception")
           if router.stacktraces:
             errobj.trace = err.getStackTraceEntries()
-          result = wrapResponseError(id, errobj)
+          result = wrapResponseError(req.id, errobj)
 
 proc makeProcName(s: string): string =
   result = ""

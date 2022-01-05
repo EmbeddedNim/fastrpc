@@ -21,12 +21,13 @@ const
 type
   FastRpcType* {.size: sizeof(uint8).} = enum
     # Fast RPC Types
-    frRequest     = 0
-    frResponse    = 1
-    frNotify      = 2 # Unsupported
-    frError       = 3
-    frSubscribe   = 4
-    frPublish     = 5
+    frRequest     = 5
+    frResponse    = 6
+    frNotify      = 7 # Unsupported
+    frError       = 8
+    frSubscribe   = 9
+    frPublish     = 10
+    frSystemRequest = 11
     frUnsupported = 23
     # rtpMax = 23 # numbers less than this store in single mpack/cbor byte
 
