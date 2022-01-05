@@ -28,6 +28,12 @@ rpc_methods(rpcExample):
     echo("echos: ", "hello ", msg)
     result = "hello: " & msg
 
+  proc testerror(msg: string): string {.rpc.} =
+    echo("test error: ", "what is your favorite color?")
+    if msg != "Blue":
+      raise newException(ValueError, "wrong answer!")
+    result = "correct: " & msg
+
 when isMainModule:
   let inetAddrs = [
     newInetAddr("0.0.0.0", 5656, Protocol.IPPROTO_UDP),

@@ -65,9 +65,16 @@ proc route*(router: FastRpcRouter,
         try:
           let res: FastRpcParamsBuffer = rpcProc(params, sender)
           result = FastRpcResponse(kind: frResponse, id: id, result: res)
-        except CatchableError:
+        except ObjectConversionDefect as err:
+          var errobj = FastRpcError(code: INVALID_PARAMS, msg: procName & " raised an exception")
+          if router.stacktraces:
+            errobj.trace = err.getStackTraceEntries()
+          result = wrapResponseError(id, errobj)
+        except CatchableError as err:
           # TODO: fix wrapping exception...
           let errobj = FastRpcError(code: SERVER_ERROR, msg: procName & " raised an exception")
+          if router.stacktraces:
+            errobj.trace = err.getStackTraceEntries()
           result = wrapResponseError(id, errobj)
 
 proc makeProcName(s: string): string =
@@ -165,7 +172,8 @@ macro rpc*(p: untyped): untyped =
   result.add quote do:
     `paramTypes`
 
-    proc `doMain`(`paramsIdent`: `paramTypeName`, context: SocketClientSender): `ReturnType` =
+    proc `doMain`(`paramsIdent`: `paramTypeName`,
+                  context: SocketClientSender): `ReturnType` =
       {.cast(gcsafe).}:
         `paramSetups`
         `procBody`

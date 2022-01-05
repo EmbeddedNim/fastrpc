@@ -1,4 +1,4 @@
-import tables, macros
+import tables, macros, strutils
 import mcu_utils/msgbuffer
 import ../inet_types
 
@@ -47,6 +47,7 @@ type
   FastRpcError* = ref object
     code*: int
     msg*: string
+    trace*: seq[StackTraceEntry]
 
   FastRpcErrorStackTrace* = object
     code*: int
@@ -61,6 +62,7 @@ type
 
   FastRpcRouter* = ref object
     procs*: Table[string, FastRpcProc]
+    stacktraces*: bool
 
   FastRpcSubsArgs* = ref object
     subid*: BinString
@@ -72,6 +74,7 @@ type
 proc newFastRpcRouter*(): FastRpcRouter =
   new(result)
   result.procs = initTable[string, FastRpcProc]()
+  result.stacktraces = defined(debug)
 
 # pack/unpack BinString
 proc pack_type*[ByteStream](s: ByteStream, val: BinString) =
@@ -92,3 +95,16 @@ proc unpack_type*[ByteStream](s: ByteStream, x: var FastRpcParamsBuffer) =
   var extbody = s.readStr(extlen)
   x.buf = MsgBuffer.init()
   shallowCopy(x.buf.data, extbody)
+
+proc pack_type*[ByteStream](s: ByteStream, x: StackTraceEntry) =
+  echo "packing ste: ", repr x
+  s.pack_array(3)
+  s.pack($x.procname)
+  s.pack(rsplit($(x.filename), '/', maxsplit=1)[^1])
+  s.pack(x.line)
+
+proc unpack_type*[ByteStream](s: ByteStream, x: var StackTraceEntry) =
+  assert s.unpack_array() == 3
+  s.unpack(x.procname)
+  s.unpack(x.filename)
+  s.unpack(x.line)
