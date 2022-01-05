@@ -94,7 +94,7 @@ template customPacketRpcHandler*(name, rpcExec: untyped): untyped =
       if buffer.data == "":
         raise newException(InetClientDisconnected, "")
       let
-        msglen = buffer.readStr(2).lengthFromBigendian16()
+        msglen = buffer.readUintBe16().int
       if buffer.data.len() != 2 + msglen:
         raise newException(OSError, "invalid length: read: " & $buffer.data.len() & " expect: " & $(2 + msglen))
       sender = senderClosure(sourceClient)
