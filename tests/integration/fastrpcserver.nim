@@ -12,7 +12,7 @@ const
 # Define RPC Server #
 rpc_methods(rpcExample):
 
-  proc add(a: int, b: int): int {.rpc.} =
+  proc add(a: int, b: int): int {.rpc, system.} =
     result = 1 + a + b
 
   proc addAll(vals: seq[int]): int {.rpc.} =

@@ -35,6 +35,10 @@ proc register*(router: var FastRpcRouter, path: string, call: FastRpcProc) =
   router.procs[path] = call
   echo "registering: ", path
 
+proc register*(router: var FastRpcRouter, path: string, call: FastRpcSysProc) =
+  router.sysprocs[path] = call
+  echo "registering: sys: ", path
+
 proc clear*(router: var FastRpcRouter) =
   router.procs.clear
 
@@ -50,10 +54,15 @@ proc route*(router: FastRpcRouter,
   dumpAllocstats:
     block:
       ## Routes and calls the fast rpc
-      let
-        rpcProc = router.procs.getOrDefault(req.procName)
+      let rpcProc = 
+        if req.kind == frRequest:
+          router.procs.getOrDefault(req.procName)
+        # elif req.kind == frSystemRequest:
+          # router.sysprocs.getOrDefault(req.procName)
+        else:
+          nil
 
-      if rpcProc.isNil:
+      if req.kind == frRequest and rpcProc.isNil:
         let
           msg = req.procName & " is not a registered RPC method."
           err = FastRpcError(code: METHOD_NOT_FOUND, msg: msg)
@@ -136,11 +145,16 @@ macro rpc*(p: untyped): untyped =
   let
     path = $p[0]
     params = p[3]
+    pragmas = p[4]
     body = p[6]
+
+  echo "RPC: path: ", $path
+  echo "RPC: params: ", treeRepr p
 
   result = newStmtList()
   let
     parameters = params
+    syspragma = pragmas.findChild(it.strVal == "system")
     # parameters = body.findChild(it.kind == nnkFormalParams)
     # procs are generated from the stripped path
     pathStr = $path
@@ -162,6 +176,8 @@ macro rpc*(p: untyped): untyped =
     paramTypes = mkParamsType(paramsIdent, paramTypeName, parameters)
     procBody = if body.kind == nnkStmtList: body else: body.body
 
+  let ContextType = if syspragma.isNil: ident "SocketClientSender"
+                    else: ident "RpcSystemContext"
   let ReturnType = if parameters.hasReturnType: parameters[0]
                    else: ident "FastRpcParamsBuffer"
 
@@ -169,28 +185,27 @@ macro rpc*(p: untyped): untyped =
   result.add quote do:
     `paramTypes`
 
-    proc `doMain`(`paramsIdent`: `paramTypeName`,
-                  context: SocketClientSender): `ReturnType` =
+    proc `procName`(`paramsIdent`: `paramTypeName`,
+                  context: `ContextType`): `ReturnType` =
       {.cast(gcsafe).}:
         `paramSetups`
         `procBody`
 
   result.add quote do:
-    proc `procName`(params: FastRpcParamsBuffer,
-                    context: SocketClientSender
+    proc `doMain`(params: FastRpcParamsBuffer,
+                    context: `ContextType`
                     ): FastRpcParamsBuffer {.gcsafe, nimcall.} =
       var obj: `paramTypeName`
       params.buf.setPosition(0)
-      var js = MsgStream.init(params.buf.data)
       params.buf.unpack(obj)
 
-      let res = `doMain`(obj, context)
+      let res = `procName`(obj, context)
       var ss = MsgBuffer.init()
       ss.pack(res)
       result = (buf: ss)
 
   result.add quote do:
-    router.register(`path`, `procName`)
+    router.register(`path`, `doMain`)
 
   # when defined(nimDumpRpcs):
     # echo "\n", pathStr, ": ", result.repr

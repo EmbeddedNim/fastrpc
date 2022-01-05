@@ -56,13 +56,19 @@ type
     stacktrace*: seq[string]
 
   # Procedure signature accepted as an RPC call by server
-  FastRpcProc* = proc(input: FastRpcParamsBuffer, context: SocketClientSender): FastRpcParamsBuffer {.gcsafe, nimcall.}
+  FastRpcProc* = proc(input: FastRpcParamsBuffer,
+                      context: SocketClientSender
+                      ): FastRpcParamsBuffer {.gcsafe, nimcall.}
+  FastRpcSysProc* = proc(input: FastRpcParamsBuffer,
+                         context: RpcSystemContext,
+                         ): FastRpcParamsBuffer {.gcsafe, nimcall.}
 
   FastRpcBindError* = object of ValueError
   FastRpcAddressUnresolvableError* = object of ValueError
 
   FastRpcRouter* = ref object
     procs*: Table[string, FastRpcProc]
+    sysprocs*: Table[string, FastRpcSysProc]
     stacktraces*: bool
 
   FastRpcSubsArgs* = ref object
@@ -70,11 +76,15 @@ type
     data*: JsonNode
     sender*: SocketClientSender 
 
+  RpcSystemContext* = ref object
+    sender*: SocketClientSender
+
   BinString* = distinct string
 
 proc newFastRpcRouter*(): FastRpcRouter =
   new(result)
   result.procs = initTable[string, FastRpcProc]()
+  # result.sysprocs = initTable[string, FastRpcProc]()
   result.stacktraces = defined(debug)
 
 # pack/unpack BinString
