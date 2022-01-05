@@ -10,25 +10,23 @@ const
   VERSION = "1.0.0"
 
 # Define RPC Server #
-proc rpc_server*(): FastRpcRouter =
-  var rt = createRpcRouter()
+rpc_methods(rpcExample):
 
-  rpc(rt, "add") do(a: int, b: int) -> int:
+  proc add(a: int, b: int): int {.rpc.} =
     result = 1 + a + b
 
-  rpc(rt, "addAll") do(vals: seq[int]) -> int:
+  proc addAll(vals: seq[int]): int {.rpc.} =
     for val in vals:
       result = result + val
 
-  rpc(rt, "multAll") do(x: int, vals: seq[int]) -> seq[int]:
+  proc multAll(x: int, vals: seq[int]): seq[int] {.rpc.} =
     result = newSeqOfCap[int](vals.len())
     for val in vals:
       result.add val * x
 
-  rpc(rt, "echo") do(msg: string) -> string:
+  proc echos(msg: string): string {.rpc.} =
+    echo("echos: ", "hello ", msg)
     result = "hello: " & msg
-
-  return rt
 
 when isMainModule:
   let inetAddrs = [
@@ -36,7 +34,10 @@ when isMainModule:
     newInetAddr("0.0.0.0", 5656, Protocol.IPPROTO_TCP),
   ]
 
-  let router = rpc_server()
+  echo "main: ROUTER: "
+  var router = rpcExample()
+  for rpc in router.procs.keys():
+    echo "  rpc: ", rpc
   startSocketServer(inetAddrs, newFastRpcServer(router, prefixMsgSize=true))
   # var rpc = rpc_server()
   # echo "rpc: ", repr rpc

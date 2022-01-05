@@ -69,6 +69,10 @@ type
 
   BinString* = distinct string
 
+proc newFastRpcRouter*(): FastRpcRouter =
+  new(result)
+  result.procs = initTable[string, FastRpcProc]()
+
 # pack/unpack BinString
 proc pack_type*[ByteStream](s: ByteStream, val: BinString) =
   s.pack_bin(len(val.string))

@@ -33,6 +33,7 @@ proc createRpcRouter*(): FastRpcRouter =
 
 proc register*(router: var FastRpcRouter, path: string, call: FastRpcProc) =
   router.procs[path] = call
+  echo "registering: ", path
 
 proc clear*(router: var FastRpcRouter) =
   router.procs.clear
@@ -111,7 +112,37 @@ proc mkParamsType*(paramsIdent, paramsType, params: NimNode): NimNode =
   result = typObj
   # echo "paramsParser return:\n", treeRepr result
 
-macro rpc*(server: FastRpcRouter, path: string, body: untyped): untyped =
+macro create_rpc_setup*(name: untyped, calls: static[FastRpcRouter]): untyped =
+  echo "create_rpc: ", name
+  var setup = newStmtList()
+  var rname = ident($name)
+
+  for k,v in calls.procs:
+    echo "create_rpc: key: ", k
+    setup.add quote do:
+      result.register(`k`, `v`)
+
+  result = newStmtList()
+  result.add quote do:
+    proc `name`*(): FastRpcRouter =
+      result = newFastRpcRouter()
+      `setup`
+
+# macro rpc_methods*(name, blk: untyped): untyped =
+#   result = newStmtList()
+#   result.add quote do:
+#     var router {.compileTime, inject.} = newFastRpcRouter()
+#   result.add quote do:
+#     `blk`
+#   result.add quote do:
+#     create_rpc_setup(name, router)
+
+template rpc_methods*(name, blk: untyped): untyped =
+  proc `name`(): FastRpcRouter =
+    result = newFastRpcRouter()
+    blk
+
+macro rpc*(p: untyped): untyped =
   ## Define a remote procedure call.
   ## Input and return parameters are defined using the ``do`` notation.
   ## For example:
@@ -121,9 +152,15 @@ macro rpc*(server: FastRpcRouter, path: string, body: untyped): untyped =
   ##    ```
   ## Input parameters are automatically marshalled from json to Nim types,
   ## and output parameters are automatically marshalled to json for transport.
+  let
+    path = $p[0]
+    params = p[3]
+    body = p[6]
+
   result = newStmtList()
   let
-    parameters = body.findChild(it.kind == nnkFormalParams)
+    parameters = params
+    # parameters = body.findChild(it.kind == nnkFormalParams)
     # procs are generated from the stripped path
     pathStr = $path
     # strip non alphanumeric
@@ -170,11 +207,9 @@ macro rpc*(server: FastRpcRouter, path: string, body: untyped): untyped =
       ss.pack(res)
       result = (buf: ss)
 
-
   result.add quote do:
-    `server`.register(`path`, `procName`)
+    result.register(`path`, `procName`)
 
   # when defined(nimDumpRpcs):
     # echo "\n", pathStr, ": ", result.repr
-
   echo "rpc return:\n", repr result
