@@ -128,15 +128,6 @@ macro create_rpc_setup*(name: untyped, calls: static[FastRpcRouter]): untyped =
       result = newFastRpcRouter()
       `setup`
 
-# macro rpc_methods*(name, blk: untyped): untyped =
-#   result = newStmtList()
-#   result.add quote do:
-#     var router {.compileTime, inject.} = newFastRpcRouter()
-#   result.add quote do:
-#     `blk`
-#   result.add quote do:
-#     create_rpc_setup(name, router)
-
 template rpc_methods*(name, blk: untyped): untyped =
   proc `name`(): FastRpcRouter =
     result = newFastRpcRouter()
