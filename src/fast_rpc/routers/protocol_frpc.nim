@@ -120,3 +120,22 @@ proc unpack_type*[ByteStream](s: ByteStream, x: var StackTraceEntry) =
   s.unpack(x.procname)
   s.unpack(x.filename)
   s.unpack(x.line)
+
+proc rpcPack*(res: FastRpcParamsBuffer): FastRpcParamsBuffer {.inline.} =
+  result = res
+
+template rpcPack*(res: JsonNode): FastRpcParamsBuffer =
+  var jpack = res.fromJsonNode()
+  var ss = MsgBuffer.init(jpack)
+  ss.setPosition(jpack.len())
+  (buf: ss)
+
+proc rpcPack*[T](res: T): FastRpcParamsBuffer =
+  var ss = MsgBuffer.init()
+  ss.pack(res)
+  result = (buf: ss)
+
+proc rpcUnpack*[T](obj: var T, ss: FastRpcParamsBuffer, resetStream = true) =
+  if resetStream:
+    ss.buf.setPosition(0)
+  ss.buf.unpack(obj)

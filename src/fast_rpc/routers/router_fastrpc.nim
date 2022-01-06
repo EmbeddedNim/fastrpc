@@ -200,13 +200,10 @@ macro rpc*(p: untyped): untyped =
                     context: `ContextType`
                     ): FastRpcParamsBuffer {.gcsafe, nimcall.} =
       var obj: `paramTypeName`
-      params.buf.setPosition(0)
-      params.buf.unpack(obj)
+      obj.rpcUnpack(params)
 
       let res = `procName`(obj, context)
-      var ss = MsgBuffer.init()
-      ss.pack(res)
-      result = (buf: ss)
+      result = res.rpcPack()
 
   result.add quote do:
     router.register(`path`, `doMain`)
@@ -217,11 +214,13 @@ macro rpc*(p: untyped): untyped =
 
 proc addStandardSyscalls*(router: var FastRpcRouter) =
 
-  proc listall(): seq[string] {.rpc, system.} =
+  proc listall(): JsonNode {.rpc, system.} =
     let rt = context.router
-    result = newSeqOfCap[string](rt.sysprocs.len())
-    for name in rt.sysprocs.keys():
-      result.add name
+    var names = newSeqOfCap[string](rt.sysprocs.len())
+    for name in rt.procs.keys():
+      names.add name
+    var methods: JsonNode = %* {"methods": names}
+    result = methods
 
 template rpc_methods*(name, blk: untyped): untyped =
   proc `name`*(router {.inject.}: var FastRpcRouter  ) =
