@@ -190,7 +190,8 @@ macro rpc*(p: untyped): untyped =
     `paramTypes`
 
     proc `procName`(`paramsIdent`: `paramTypeName`,
-                  `ctxName`: `ContextType`): `ReturnType` =
+                    `ctxName`: `ContextType`
+                    ): `ReturnType` =
       {.cast(gcsafe).}:
         `paramSetups`
         `procBody`
