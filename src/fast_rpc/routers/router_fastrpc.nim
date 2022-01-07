@@ -1,4 +1,5 @@
 import tables, strutils, macros
+import mcu_utils/basictypes
 import mcu_utils/msgbuffer
 
 import msgpack4nim
@@ -8,6 +9,7 @@ import msgpack4nim/msgpack2json
 
 import protocol_frpc
 export protocol_frpc
+export Millis
 
 proc makeProcName(s: string): string =
   result = ""
@@ -100,7 +102,7 @@ proc register*(router: var FastRpcRouter, path: string, call: FastRpcProc) =
   router.procs[path] = call
   echo "registering: ", path
 
-proc register*(router: var FastRpcRouter, path: string, call: FastRpcSysProc) =
+proc sysRegister*(router: var FastRpcRouter, path: string, call: FastRpcProc) =
   router.sysprocs[path] = call
   echo "registering: sys: ", path
 
@@ -112,9 +114,10 @@ proc hasMethod*(router: FastRpcRouter, methodName: string): bool =
 
 proc emptySender(data: string): bool = false
 
-proc handleRoute*[P](
-            rpcProc: P,
+proc handleRoute*(
+            rpcProc: FastRpcProc,
             router: FastRpcRouter,
+            stacktraces: bool,
             req: FastRpcRequest,
             sender: SocketClientSender = emptySender
             ): FastRpcResponse {.gcsafe.} =
@@ -127,10 +130,7 @@ proc handleRoute*[P](
         try:
           # Handle rpc request the `context` variable is different
           # based on whether the rpc request is a system/regular/subscription
-          when typeof(rpcProc) is FastRpcSysProc:
-            let ctx = RpcSystemContext(id: req.id, sender: sender, router: router)
-          else:
-            let ctx = RpcContext(id: req.id, sender: sender)
+          var ctx = RpcContext(id: req.id, sender: sender, router: router)
           let res: FastRpcParamsBuffer = rpcProc(req.params, ctx)
           result = FastRpcResponse(kind: frResponse, id: req.id, result: res)
         except ObjectConversionDefect as err:
@@ -139,14 +139,14 @@ proc handleRoute*[P](
                       INVALID_PARAMS,
                       req.procName & " raised an exception",
                       err, 
-                      router.stacktraces)
+                      stacktraces)
         except CatchableError as err:
           result = wrapResponseError(
                       req.id,
                       INTERNAL_ERROR,
                       req.procName & " raised an exception",
                       err, 
-                      router.stacktraces)
+                      stacktraces)
 
 proc route*(router: FastRpcRouter,
             req: FastRpcRequest,
@@ -156,14 +156,34 @@ proc route*(router: FastRpcRouter,
   dumpAllocstats:
     if req.kind == frRequest:
       let rpcProc = router.procs.getOrDefault(req.procName)
-      result = rpcProc.handleRoute(router, req, sender)
+      result = rpcProc.handleRoute(router, router.stacktraces, req, sender)
     elif req.kind == frSystemRequest:
       let rpcProc = router.sysprocs.getOrDefault(req.procName)
-      result = rpcProc.handleRoute(router, req, sender)
+      result = rpcProc.handleRoute(router, router.stacktraces, req, sender)
+
+proc threadRunner(args: FastRpcThreadArg) =
+  let fn = args[0]
+  let res = fn(args[1], args[2])
+
 
 # ========================= Define RPC Server ========================= #
+template mkSubscriptionMethod(rpcfunc: FastRpcProc): FastRpcProc = 
 
-macro rpc*(p: untyped): untyped =
+  when compiles(typeof Thread):
+    proc rpcPublishThread(params: FastRpcParamsBuffer, context: RpcContext): FastRpcParamsBuffer {.gcsafe, nimcall.} =
+      let subid = randBinString()
+      context.router.threads[subid] = Thread[FastRpcThreadArg]()
+      let args: (FastRpcProc, FastRpcParamsBuffer, RpcContext) = (rpcfunc, params, context)
+      createThread(context.router.threads[subid], threadRunner, args)
+      result = rpcPack(subid)
+
+    rpcPublishThread
+  else:
+    error("must have threads enabled")
+  
+
+
+macro rpcImpl*(p: untyped, publish: untyped): untyped =
   ## Define a remote procedure call.
   ## Input and return parameters are defined using proc's with the `rpc` 
   ## pragma. 
@@ -177,20 +197,26 @@ macro rpc*(p: untyped): untyped =
   ## Input parameters are automatically marshalled from fast rpc binary 
   ## format (msgpack) and output parameters are automatically marshalled
   ## back to the fast rpc binary format (msgpack) for transport.
+  
+  if publish.kind != nnkNilLit:
+    echo "RPC: pub: tp: ", typeof publish
+    echo "RPC: pub: kd: ", publish.kind
+    echo "RPC: pub: ", repr publish
+    echo "RPC: ", p.treeRepr
+    
   let
     path = $p[0]
     params = p[3]
     pragmas = p[4]
     body = p[6]
 
-  echo "RPC: path: ", $path
-  echo "RPC: params: ", treeRepr p
-
   result = newStmtList()
   let
     parameters = params
-    # find if this is a "system" rpc method
-    syspragma = pragmas.findChild(it.strVal == "system")
+    # determine if this is a "system" rpc method
+    pubthread = publish.kind == nnkStrLit and publish.strVal == "thread"
+    pubtask = publish.kind == nnkInt64Lit 
+    syspragma = not pragmas.findChild(it.repr == "system").isNil
 
     # rpc method names
     pathStr = $path
@@ -205,6 +231,7 @@ macro rpc*(p: untyped): untyped =
     paramTypeName = ident("RpcType_" & procNameStr)
 
     rpcMethod = ident(procNameStr & "RpcMethod")
+    rpcSubscribeMethod = ident(procNameStr & "RpcSubscribe")
 
   var
     # process the argument types
@@ -213,8 +240,11 @@ macro rpc*(p: untyped): untyped =
     procBody = if body.kind == nnkStmtList: body else: body.body
 
   # set the "context" variable type and the return types
-  let ContextType = if syspragma.isNil: ident "RpcContext"
-                    else: ident "RpcSystemContext"
+  # echo "PUBTHEAD: ", pubthread 
+
+  # let ContextType = if syspragma.isNil: ident "RpcContext"
+                    # else: ident "RpcSystemContext"
+  let ContextType = ident "RpcContext"
   let ReturnType = if parameters.hasReturnType: parameters[0]
                    else: ident "FastRpcParamsBuffer"
 
@@ -231,17 +261,37 @@ macro rpc*(p: untyped): untyped =
 
   # Create the rpc wrapper procs
   result.add quote do:
-    proc `rpcMethod`(params: FastRpcParamsBuffer,
-                     context: `ContextType`
-                     ): FastRpcParamsBuffer {.gcsafe, nimcall.} =
+    proc `rpcMethod`(params: FastRpcParamsBuffer, context: `ContextType`): FastRpcParamsBuffer {.gcsafe, nimcall.} =
       var obj: `paramTypeName`
       obj.rpcUnpack(params)
 
       let res = `procName`(obj, context)
       result = res.rpcPack()
 
-  result.add quote do:
-    router.register(`path`, `rpcMethod`)
+  # Register rpc wrapper
+  if pubthread:
+    result.add quote do:
+      let subm: FastRpcProc = mkSubscriptionMethod(`rpcMethod`)
+      router.register(`path`, subm)
+  elif syspragma:
+    result.add quote do:
+      router.sysRegister(`path`, `rpcMethod`)
+  else:
+    result.add quote do:
+      router.register(`path`, `rpcMethod`)
+
+template rpc*(p: untyped): untyped =
+  rpcImpl(p, nil)
+
+template rpcPublisher*(args: static[Millis], p: untyped): untyped =
+  static:
+    echo "RPC: PUBLISHER TICK"
+  rpcImpl(p, args)
+
+template rpcPublisherThread*(p: untyped): untyped =
+  static:
+    echo "RPC: PUBLISHER THREAD"
+  rpcImpl(p, "thread")
 
 proc addStandardSyscalls*(router: var FastRpcRouter) =
 

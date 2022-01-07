@@ -1,4 +1,7 @@
 import tables, macros, strutils
+import std/sysrand
+import std/hashes
+
 import mcu_utils/msgbuffer
 import ../inet_types
 
@@ -19,6 +22,7 @@ type
     INVALID_PARAMS = -24
     INTERNAL_ERROR = -23
     SERVER_ERROR = -22
+
 
 type
   FastRpcType* {.size: sizeof(uint8).} = enum
@@ -58,40 +62,34 @@ type
     stacktrace*: seq[string]
 
   # Procedure signature accepted as an RPC call by server
-  FastRpcProc* = proc(input: FastRpcParamsBuffer,
-                      context: RpcContext
-                      ): FastRpcParamsBuffer {.gcsafe, nimcall.}
-  FastRpcSysProc* = proc(input: FastRpcParamsBuffer,
-                         context: RpcSystemContext,
-                         ): FastRpcParamsBuffer {.gcsafe, nimcall.}
+  FastRpcProc* = proc(params: FastRpcParamsBuffer, context: RpcContext): FastRpcParamsBuffer {.gcsafe, nimcall.}
 
   FastRpcBindError* = object of ValueError
   FastRpcAddressUnresolvableError* = object of ValueError
 
   FastRpcRouter* = ref object
     procs*: Table[string, FastRpcProc]
-    sysprocs*: Table[string, FastRpcSysProc]
+    sysprocs*: Table[string, FastRpcProc]
     stacktraces*: bool
-
-  FastRpcSubsArgs* = ref object
-    subid*: BinString
-    data*: JsonNode
-    sender*: SocketClientSender 
+    when compiles(typeof Thread):
+      threads*: TableRef[BinString, Thread[FastRpcThreadArg]]
 
   RpcContext* = ref object
-    id*: FastRpcId
-    sender*: SocketClientSender
-
-  RpcPublishContext* = ref object
-    id*: FastRpcId
-    sender*: SocketClientSender
-
-  RpcSystemContext* = ref object
     id*: FastRpcId
     sender*: SocketClientSender
     router*: FastRpcRouter
 
   BinString* = distinct string
+
+  FastRpcThreadArg* = (FastRpcProc, FastRpcParamsBuffer, RpcContext)
+
+proc randBinString*(): BinString =
+  var idarr: array[8, byte]
+  result =
+    if urandom(idarr):
+      BinString($(cast[cstring](addr idarr)))
+    else:
+      BinString("")
 
 proc newFastRpcRouter*(): FastRpcRouter =
   new(result)
@@ -113,6 +111,8 @@ proc listSysMethods*(rt: FastRpcRouter): seq[string] =
 
 # pack/unpack BinString
 proc `$`*(val: BinString): string {.borrow.}
+proc `hash`*(x: BinString): Hash {.borrow.}
+proc `==`*(x, y: BinString): bool {.borrow.}
 
 proc pack_type*[ByteStream](s: ByteStream, val: BinString) =
   s.pack_bin(len(val.string))
@@ -153,4 +153,4 @@ proc rpcUnpack*[T](obj: var T, ss: FastRpcParamsBuffer, resetStream = true) =
       ss.buf.setPosition(0)
     ss.buf.unpack(obj)
   except AssertionDefect as err:
-    raise newException(ObjectConversionDefect, "unable to parse parameters")
+    raise newException(ObjectConversionDefect, "unable to parse parameters: " & err.msg)

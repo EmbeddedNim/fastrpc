@@ -7,6 +7,7 @@ import fast_rpc/socketserver/fast_rpc_impl
 const
   VERSION = "1.0.0"
 
+
 # Define RPC Server #
 rpc_methods(rpcExample):
 
@@ -35,20 +36,19 @@ rpc_methods(rpcExample):
       os.sleep(400)
     result = "k bye"
 
+  proc echopub(msg: string, count: int) {.rpcPublisherThread().} =
+    # var subid = subs.subscribeWithThread(context, run_micros, % delay)
+    let rmsg = "hello " & msg
+    for i in 0..count:
+      echo("echos: ", rmsg)
+      discard rpcReply(rmsg)
+      os.sleep(400)
+
   proc testerror(msg: string): string {.rpc.} =
     echo("test error: ", "what is your favorite color?")
     if msg != "Blue":
       raise newException(ValueError, "wrong answer!")
     result = "correct: " & msg
-
-  # proc tickmicros(delayms: int, context: RpcContext): string {.rpc, subscription, thread.} =
-  #   os.sleep(delayms)
-  #   var value: JsonNode = %* {"subscription": context.subId, "result": ts}
-  #   var msg: string = value.rpcPack()
-
-  #   let res = sender(msg)
-  #   if not res: break
-  #   os.sleep(delay)
 
 when isMainModule:
   let inetAddrs = [
