@@ -160,8 +160,8 @@ proc route*(router: RpcRouter,
             node: JsonNode,
             sender: SocketClientSender = proc (data: string): bool = false
            ): JsonNode {.gcsafe.} =
-  ## Assumes correct setup of node
-  # dumpAllocstats:
+    ## Assumes correct setup of node
+    # dumpAllocstats:
     let
       methodName = node[methodField].str
       id = node[idField]
