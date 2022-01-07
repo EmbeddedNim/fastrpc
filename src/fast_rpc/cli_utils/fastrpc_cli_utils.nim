@@ -154,9 +154,9 @@ proc execRpc( client: Socket, i: int, call: var FastRpcRequest, opts: RpcOptions
       mnode = resbuf.toJsonNode()
       if not opts.quiet and not opts.noprint:
         if opts.prettyPrint:
-          print(colBlue, pretty(mnode))
+          print(colOrange, pretty(mnode))
         else:
-          print(colBlue, $(mnode))
+          print(colOrange, $(mnode))
 
     if not opts.quiet and not opts.noprint:
       print colGreen, "[rpc done at " & $now() & "]"

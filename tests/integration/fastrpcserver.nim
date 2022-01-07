@@ -33,7 +33,7 @@ rpc_methods(rpcExample):
       # discard context.sender(rmsg)
       discard rpcReply(rmsg)
       os.sleep(400)
-    result = "done"
+    result = "k bye"
 
   proc testerror(msg: string): string {.rpc.} =
     echo("test error: ", "what is your favorite color?")

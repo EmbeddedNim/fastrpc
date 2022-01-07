@@ -248,8 +248,7 @@ template rpcReply*(value: untyped): untyped =
   ## TODO: FIXME
   ## this turned out kind of ugly... 
   ## but it works, think it'll work for subscriptions too 
-  var params = @[value]
-  var packed: FastRpcParamsBuffer = rpcPack(params)
+  var packed: FastRpcParamsBuffer = rpcPack(value)
   let res: FastRpcResponse = wrapResponse(0.FastRpcId, packed, frPublish)
   var so = MsgBuffer.init(res.result.buf.data.len() + sizeof(res))
   so.pack(res)
