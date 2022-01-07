@@ -47,6 +47,7 @@ type
     prettyPrint: bool
     quiet: bool
     system: bool
+    subscribe: bool
     dryRun: bool
     noprint: bool
 
@@ -221,6 +222,7 @@ proc call(ip: IpAddress,
           delay=0,
           showstats=false,
           system=false,
+          subscribe=false,
           keepalive=false,
           rawJsonArgs="") =
 
@@ -233,6 +235,7 @@ proc call(ip: IpAddress,
                         showstats: showstats,
                         prettyPrint: pretty,
                         system: system,
+                        subscribe: subscribe,
                         keepalive: keepalive)
 
   ## Some API call
@@ -255,7 +258,9 @@ proc call(ip: IpAddress,
   var ss = MsgBuffer.init()
   ss.write jargs.fromJsonNode()
   # ss.pack(jargs)
-  let kind = if opts.system: frSystemRequest else: frRequest
+  let kind = if opts.system: frSystemRequest
+             elif opts.subscribe: frSubscribe
+             else: frRequest
   var call = FastRpcRequest(kind: kind,
                             id: 1,
                             procName: name,

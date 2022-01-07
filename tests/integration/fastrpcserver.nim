@@ -11,7 +11,7 @@ const
 # Define RPC Server #
 rpc_methods(rpcExample):
 
-  proc add(a: int, b: int): int {.rpc, system.} =
+  proc add(a: int, b: int): int {.rpc.} =
     result = 1 + a + b
 
   proc addAll(vals: seq[int]): int {.rpc.} =
@@ -36,7 +36,7 @@ rpc_methods(rpcExample):
       os.sleep(400)
     result = "k bye"
 
-  proc echopub(msg: string, count: int) {.rpcPublisherThread().} =
+  proc echopub(msg: string, count: int): int {.rpcPublisherThread().} =
     # var subid = subs.subscribeWithThread(context, run_micros, % delay)
     let rmsg = "hello " & msg
     for i in 0..count:

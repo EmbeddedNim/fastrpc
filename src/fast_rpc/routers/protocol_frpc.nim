@@ -83,6 +83,10 @@ type
 
   FastRpcThreadArg* = (FastRpcProc, FastRpcParamsBuffer, RpcContext)
 
+proc `$`*(val: BinString): string {.borrow.}
+proc `hash`*(x: BinString): Hash {.borrow.}
+proc `==`*(x, y: BinString): bool {.borrow.}
+
 proc randBinString*(): BinString =
   var idarr: array[8, byte]
   result =
@@ -96,6 +100,8 @@ proc newFastRpcRouter*(): FastRpcRouter =
   result.procs = initTable[string, FastRpcProc]()
   # result.sysprocs = initTable[string, FastRpcProc]()
   result.stacktraces = defined(debug)
+  when compiles(typeof Thread):
+    result.threads = newTable[BinString, Thread[FastRpcThreadArg]]()
 
 proc listMethods*(rt: FastRpcRouter): seq[string] =
   ## list the methods in the given router. 
@@ -110,10 +116,6 @@ proc listSysMethods*(rt: FastRpcRouter): seq[string] =
     result.add name
 
 # pack/unpack BinString
-proc `$`*(val: BinString): string {.borrow.}
-proc `hash`*(x: BinString): Hash {.borrow.}
-proc `==`*(x, y: BinString): bool {.borrow.}
-
 proc pack_type*[ByteStream](s: ByteStream, val: BinString) =
   s.pack_bin(len(val.string))
   s.write(val.string)

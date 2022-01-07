@@ -25,6 +25,7 @@ proc fastRpcExec*(rt: FastRpcRouter,
   ss.unpack(rcall)
   logDebug("msgpack rcall:", rcall)
   var res: FastRpcResponse = rt.route(rcall, sender)
+  echo "RES: ", repr res
   var so = MsgBuffer.init(res.result.buf.data.len() + sizeof(res))
   so.pack(res)
   return so.data

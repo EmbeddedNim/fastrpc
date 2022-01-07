@@ -160,10 +160,20 @@ proc route*(router: FastRpcRouter,
     elif req.kind == frSystemRequest:
       let rpcProc = router.sysprocs.getOrDefault(req.procName)
       result = rpcProc.handleRoute(router, router.stacktraces, req, sender)
+    elif req.kind == frSubscribe:
+      let rpcProc = router.procs.getOrDefault(req.procName)
+      result = rpcProc.handleRoute(router, router.stacktraces, req, sender)
+    else:
+      result = wrapResponseError(
+                  req.id,
+                  SERVER_ERROR,
+                  "unimplemented request typed",
+                  nil, 
+                  router.stacktraces)
 
 proc threadRunner(args: FastRpcThreadArg) =
   let fn = args[0]
-  let res = fn(args[1], args[2])
+  discard fn(args[1], args[2])
 
 
 # ========================= Define RPC Server ========================= #
@@ -244,9 +254,13 @@ macro rpcImpl*(p: untyped, publish: untyped): untyped =
 
   # let ContextType = if syspragma.isNil: ident "RpcContext"
                     # else: ident "RpcSystemContext"
+
   let ContextType = ident "RpcContext"
-  let ReturnType = if parameters.hasReturnType: parameters[0]
-                   else: ident "FastRpcParamsBuffer"
+  let ReturnType = if parameters.hasReturnType:
+                      parameters[0]
+                   else:
+                      error("must provide return type")
+                      ident "void"
 
   # Create the proc's that hold the users code 
   result.add quote do:
