@@ -164,8 +164,8 @@ proc route*(router: FastRpcRouter,
             req: FastRpcRequest,
             sender: SocketClientSender = emptySender
             ): FastRpcResponse {.gcsafe.} =
-  ## Route's an rpc request. 
-  # dumpAllocstats:
+    ## Route's an rpc request. 
+    # dumpAllocstats:
     if req.kind == frRequest:
       let rpcProc = router.procs.getOrDefault(req.procName)
       result = rpcProc.handleRoute(router, router.stacktraces, req, sender)
