@@ -101,15 +101,15 @@ proc newFastRpcRouter*(): FastRpcRouter =
 
 proc listMethods*(rt: FastRpcRouter): seq[string] =
   ## list the methods in the given router. 
-  var names = newSeqOfCap[string](rt.procs.len())
+  result = newSeqOfCap[string](rt.procs.len())
   for name in rt.procs.keys():
-    names.add name
+    result.add name
 
 proc listSysMethods*(rt: FastRpcRouter): seq[string] =
   ## list the methods in the given router. 
-  var names = newSeqOfCap[string](rt.sysprocs.len())
+  result = newSeqOfCap[string](rt.sysprocs.len())
   for name in rt.sysprocs.keys():
-    names.add name
+    result.add name
 
 # pack/unpack BinString
 proc `$`*(val: BinString): string {.borrow.}

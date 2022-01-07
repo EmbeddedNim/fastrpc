@@ -247,8 +247,8 @@ proc addStandardSyscalls*(router: var FastRpcRouter) =
 
   proc listall(): JsonNode {.rpc, system.} =
     let names = context.router.listMethods()
-    var methods: JsonNode = %* {"methods": names}
-    result = methods
+    let sysnames = context.router.listSysMethods()
+    result = %* {"methods": names, "system": sysnames}
 
 template rpc_methods*(name, blk: untyped): untyped =
   ## Define a proc called `name` that creates returns an RPC
