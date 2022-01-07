@@ -55,7 +55,6 @@ proc senderClosure*(sourceClient: Socket): SocketClientSender =
       proc (data: string): bool =
         try:
           var datasz = data.len().int16.lengthBigendian16()
-          logDebug("sending prefix msg size: ", repr(datasz))
           sourceClient.sendSafe(datasz & data)
           return true
         except OSError:

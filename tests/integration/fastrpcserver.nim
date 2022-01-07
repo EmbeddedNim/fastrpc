@@ -39,10 +39,9 @@ rpc_methods(rpcExample):
   proc echopub(msg: string, count: int): int {.rpcPublisherThread().} =
     # var subid = subs.subscribeWithThread(context, run_micros, % delay)
     let rmsg = "hello " & msg
-    for i in 0..count:
-      echo("echos: ", rmsg)
+    while true:
       discard rpcReply(rmsg)
-      os.sleep(400)
+      os.sleep(count)
 
   proc testerror(msg: string): string {.rpc.} =
     echo("test error: ", "what is your favorite color?")
