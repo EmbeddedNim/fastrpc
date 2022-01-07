@@ -138,7 +138,7 @@ proc execRpc( client: Socket, i: int, call: var FastRpcRequest, opts: RpcOptions
         if opts.prettyPrint:
           print(colOrange, pretty(mnode))
         else:
-          print(colBlue, $(mnode))
+          print(colOrange, $(mnode))
 
       response = readResponse()
 

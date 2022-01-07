@@ -245,6 +245,9 @@ template rpc_methods*(name, blk: untyped): untyped =
     `name`(result)
 
 template rpcReply*(value: untyped): untyped =
+  ## TODO: FIXME
+  ## this turned out kind of ugly... 
+  ## but it works, think it'll work for subscriptions too 
   var params = @[value]
   var packed: FastRpcParamsBuffer = rpcPack(params)
   let res: FastRpcResponse = wrapResponse(0.FastRpcId, packed, frPublish)
