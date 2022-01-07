@@ -120,16 +120,17 @@ proc handleRoute*[P](
             ): FastRpcResponse {.gcsafe.} =
 
       if rpcProc.isNil:
-        let
-          msg = req.procName & " is not a registered RPC method."
-          err = FastRpcError(code: METHOD_NOT_FOUND, msg: msg)
+        let msg = req.procName & " is not a registered RPC method."
+        let err = FastRpcError(code: METHOD_NOT_FOUND, msg: msg)
         result = wrapResponseError(req.id, err)
       else:
         try:
+          # Handle rpc request the `context` variable is different
+          # based on whether the rpc request is a system/regular/subscription
           when typeof(rpcProc) is FastRpcSysProc:
-            let ctx = RpcSystemContext(sender: sender, router: router)
+            let ctx = RpcSystemContext(id: req.id, sender: sender, router: router)
           else:
-            let ctx = RpcContext(sender: sender)
+            let ctx = RpcContext(id: req.id, sender: sender)
           let res: FastRpcParamsBuffer = rpcProc(req.params, ctx)
           result = FastRpcResponse(kind: frResponse, id: req.id, result: res)
         except ObjectConversionDefect as err:
@@ -140,10 +141,9 @@ proc handleRoute*[P](
                       err, 
                       router.stacktraces)
         except CatchableError as err:
-          # TODO: fix wrapping exception...
           result = wrapResponseError(
                       req.id,
-                      INVALID_PARAMS,
+                      INTERNAL_ERROR,
                       req.procName & " raised an exception",
                       err, 
                       router.stacktraces)
@@ -152,6 +152,7 @@ proc route*(router: FastRpcRouter,
             req: FastRpcRequest,
             sender: SocketClientSender = emptySender
             ): FastRpcResponse {.gcsafe.} =
+  ## Route's an rpc request. 
   dumpAllocstats:
     if req.kind == frRequest:
       let rpcProc = router.procs.getOrDefault(req.procName)
@@ -160,7 +161,7 @@ proc route*(router: FastRpcRouter,
       let rpcProc = router.sysprocs.getOrDefault(req.procName)
       result = rpcProc.handleRoute(router, req, sender)
 
-# Define RPC Server #
+# ========================= Define RPC Server ========================= #
 
 macro rpc*(p: untyped): untyped =
   ## Define a remote procedure call.
@@ -287,7 +288,7 @@ template rpcReply*(value: untyped): untyped =
   ## this turned out kind of ugly... 
   ## but it works, think it'll work for subscriptions too 
   var packed: FastRpcParamsBuffer = rpcPack(value)
-  let res: FastRpcResponse = wrapResponse(0.FastRpcId, packed, frPublish)
+  let res: FastRpcResponse = wrapResponse(context.id, packed, frPublish)
   var so = MsgBuffer.init(res.result.buf.data.len() + sizeof(res))
   so.pack(res)
   context.sender(so.data)

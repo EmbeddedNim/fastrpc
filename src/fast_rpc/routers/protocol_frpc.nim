@@ -79,12 +79,15 @@ type
     sender*: SocketClientSender 
 
   RpcContext* = ref object
+    id*: FastRpcId
     sender*: SocketClientSender
 
   RpcPublishContext* = ref object
+    id*: FastRpcId
     sender*: SocketClientSender
 
   RpcSystemContext* = ref object
+    id*: FastRpcId
     sender*: SocketClientSender
     router*: FastRpcRouter
 
