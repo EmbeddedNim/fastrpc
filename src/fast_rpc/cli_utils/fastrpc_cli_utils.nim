@@ -87,45 +87,60 @@ proc execRpc( client: Socket, i: int, call: var FastRpcRequest, opts: RpcOptions
       # client.send( msz )
       client.send( msz & mcall )
 
-      var msgLenBytes = client.recv(2, timeout = 10)
-      if msgLenBytes.len() == 0:
-        print("[socket read: 0, return]")
-        return
-      var msgLen: int16 = msgLenBytes.lengthFromBigendian16()
-      if not opts.quiet and not opts.noprint:
-        print("[socket read:data:lenstr: " & repr(msgLenBytes) & "]")
-        print("[socket read:data:len: " & repr(msgLen) & "]")
-
-      var msg = ""
-      while msg.len() < msgLen:
+      template readResponse(): untyped = 
+        var msgLenBytes = client.recv(2, timeout = -1)
+        if msgLenBytes.len() == 0:
+          print(colGray, "[socket read: 0, return]")
+          return
+        var msgLen: int16 = msgLenBytes.lengthFromBigendian16()
         if not opts.quiet and not opts.noprint:
-          print("[reading msg]")
-        let mb = client.recv(4096, timeout = -1)
+          print(colGray, "[socket read:data:lenstr: " & repr(msgLenBytes) & "]")
+          print(colGray, "[socket read:data:len: " & repr(msgLen) & "]")
+
+        var msg = ""
+        while msg.len() < msgLen:
+          if not opts.quiet and not opts.noprint:
+            print(colGray, "[reading msg]")
+          let mb = client.recv(4096, timeout = -1)
+          if not opts.quiet and not opts.noprint:
+            print(colGray, "[read bytes: " & $mb.len() & "]")
+          msg.add mb
         if not opts.quiet and not opts.noprint:
-          print("[read bytes: " & $mb.len() & "]")
-        msg.add mb
+          print(colGray, "[socket data: " & repr(msg) & "]")
 
-    if not opts.quiet and not opts.noprint:
-      print("[socket data: " & repr(msg) & "]")
+        if not opts.quiet and not opts.noprint:
+          print colGray, "[read bytes: ", $msg.len(), "]"
+          print colGray, "[read: ", repr(msg), "]"
 
-    if not opts.quiet and not opts.noprint:
-      print colGray, "[read bytes: ", $msg.len(), "]"
-      print colGray, "[read: ", repr(msg), "]"
+        var rbuff = MsgBuffer.init(msg)
+        var response: FastRpcResponse
+        rbuff.unpack(response)
 
+        response
+
+
+    var response = readResponse()
     # var mnode: JsonNode = msg.toJsonNode()
     # var mres: JsonNode = mnode[3]
-    var rbuff = MsgBuffer.init(msg)
-    var response: FastRpcResponse
-    rbuff.unpack(response)
-
     if not opts.quiet and not opts.noprint:
-      print colBlue, "[response:kind: ", repr(response.kind), "]"
+      print colOrange, "[response:kind: ", repr(response.kind), "]"
 
     if not opts.quiet and not opts.noprint:
       print("")
       print(colAquamarine, repr response)
 
     var mnode: JsonNode
+
+    while response.kind == frPublish:
+      var resbuf = MsgStream.init(response.result.buf.data)
+      mnode = resbuf.toJsonNode()
+      if not opts.quiet and not opts.noprint:
+        if opts.prettyPrint:
+          print(colOrange, pretty(mnode))
+        else:
+          print(colBlue, $(mnode))
+
+      response = readResponse()
 
     if response.kind == frError:
       var resbuf = MsgStream.init(response.result.buf.data)

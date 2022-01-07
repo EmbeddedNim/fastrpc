@@ -51,8 +51,8 @@ proc mkParamsType*(paramsIdent, paramsType, params: NimNode): NimNode =
   result = typObj
   # echo "paramsParser return:\n", treeRepr result
 
-proc wrapResponse*(id: FastRpcId, resp: FastRpcParamsBuffer): FastRpcResponse = 
-  result.kind = frResponse
+proc wrapResponse*(id: FastRpcId, resp: FastRpcParamsBuffer, kind = frResponse): FastRpcResponse = 
+  result.kind = kind
   result.id = id
   result.result = resp
 
@@ -243,3 +243,11 @@ template rpc_methods*(name, blk: untyped): untyped =
   proc `name`*(): FastRpcRouter =
     result = newFastRpcRouter()
     `name`(result)
+
+template rpcReply*(value: untyped): untyped =
+  var params = @[value]
+  var packed: FastRpcParamsBuffer = rpcPack(params)
+  let res: FastRpcResponse = wrapResponse(0.FastRpcId, packed, frPublish)
+  var so = MsgBuffer.init(res.result.buf.data.len() + sizeof(res))
+  so.pack(res)
+  context.sender(so.data)

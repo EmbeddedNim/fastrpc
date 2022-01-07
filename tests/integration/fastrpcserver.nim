@@ -30,7 +30,9 @@ rpc_methods(rpcExample):
     let rmsg = "hello " & msg
     for i in 0..count:
       echo("echos: ", rmsg)
-      discard context.sender(rmsg)
+      # discard context.sender(rmsg)
+      discard rpcReply(rmsg)
+      os.sleep(400)
     result = "done"
 
   proc testerror(msg: string): string {.rpc.} =
