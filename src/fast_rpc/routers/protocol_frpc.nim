@@ -8,15 +8,17 @@ export msgbuffer
 
 ## Code copied from: status-im/nim-json-rpc is licensed under the Apache License 2.0
 const
-  EXT_TAG_EMBEDDED_ARGS* = 24 # copy CBOR's "embedded cbor data" tag
+  EXT_TAG_EMBEDDED_ARGS = 24 # copy CBOR's "embedded cbor data" tag
 
-  # Error messages
-  FAST_PARSE_ERROR* = -27
-  INVALID_REQUEST* = -26
-  METHOD_NOT_FOUND* = -25
-  INVALID_PARAMS* = -24
-  INTERNAL_ERROR* = -23
-  SERVER_ERROR* = -22
+type
+  FastErrorCodes* = enum
+    # Error messages
+    FAST_PARSE_ERROR = -27
+    INVALID_REQUEST = -26
+    METHOD_NOT_FOUND = -25
+    INVALID_PARAMS = -24
+    INTERNAL_ERROR = -23
+    SERVER_ERROR = -22
 
 type
   FastRpcType* {.size: sizeof(uint8).} = enum
@@ -46,9 +48,9 @@ type
     result*: FastRpcParamsBuffer # - we handle params below
 
   FastRpcError* = ref object
-    code*: int
+    code*: FastErrorCodes
     msg*: string
-    trace*: seq[StackTraceEntry]
+    trace*: seq[(string, string, int)]
 
   FastRpcErrorStackTrace* = object
     code*: int
@@ -57,7 +59,7 @@ type
 
   # Procedure signature accepted as an RPC call by server
   FastRpcProc* = proc(input: FastRpcParamsBuffer,
-                      context: SocketClientSender
+                      context: RpcContext
                       ): FastRpcParamsBuffer {.gcsafe, nimcall.}
   FastRpcSysProc* = proc(input: FastRpcParamsBuffer,
                          context: RpcSystemContext,
@@ -76,6 +78,12 @@ type
     data*: JsonNode
     sender*: SocketClientSender 
 
+  RpcContext* = ref object
+    sender*: SocketClientSender
+
+  RpcPublishContext* = ref object
+    sender*: SocketClientSender
+
   RpcSystemContext* = ref object
     sender*: SocketClientSender
     router*: FastRpcRouter
@@ -89,6 +97,8 @@ proc newFastRpcRouter*(): FastRpcRouter =
   result.stacktraces = defined(debug)
 
 # pack/unpack BinString
+proc `$`*(val: BinString): string {.borrow.}
+
 proc pack_type*[ByteStream](s: ByteStream, val: BinString) =
   s.pack_bin(len(val.string))
   s.write(val.string)
@@ -108,19 +118,6 @@ proc unpack_type*[ByteStream](s: ByteStream, x: var FastRpcParamsBuffer) =
   x.buf = MsgBuffer.init()
   shallowCopy(x.buf.data, extbody)
 
-proc pack_type*[ByteStream](s: ByteStream, x: StackTraceEntry) =
-  echo "packing ste: ", repr x
-  s.pack_array(3)
-  s.pack($x.procname)
-  s.pack(rsplit($(x.filename), '/', maxsplit=1)[^1])
-  s.pack(x.line)
-
-proc unpack_type*[ByteStream](s: ByteStream, x: var StackTraceEntry) =
-  assert s.unpack_array() == 3
-  s.unpack(x.procname)
-  s.unpack(x.filename)
-  s.unpack(x.line)
-
 proc rpcPack*(res: FastRpcParamsBuffer): FastRpcParamsBuffer {.inline.} =
   result = res
 
@@ -136,6 +133,9 @@ proc rpcPack*[T](res: T): FastRpcParamsBuffer =
   result = (buf: ss)
 
 proc rpcUnpack*[T](obj: var T, ss: FastRpcParamsBuffer, resetStream = true) =
-  if resetStream:
-    ss.buf.setPosition(0)
-  ss.buf.unpack(obj)
+  try:
+    if resetStream:
+      ss.buf.setPosition(0)
+    ss.buf.unpack(obj)
+  except AssertionDefect as err:
+    raise newException(ObjectConversionDefect, "unable to parse parameters")

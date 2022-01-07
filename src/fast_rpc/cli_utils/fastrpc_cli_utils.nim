@@ -117,18 +117,31 @@ proc execRpc( client: Socket, i: int, call: var FastRpcRequest, opts: RpcOptions
     var rbuff = MsgBuffer.init(msg)
     var response: FastRpcResponse
     rbuff.unpack(response)
-    var resbuf = MsgStream.init(response.result.buf.data)
-    var mnode = resbuf.toJsonNode()
+
+    if not opts.quiet and not opts.noprint:
+      print colBlue, "[response:kind: ", repr(response.kind), "]"
 
     if not opts.quiet and not opts.noprint:
       print("")
-
-    if not opts.quiet and not opts.noprint:
       print(colAquamarine, repr response)
-      if opts.prettyPrint:
-        print(colAquamarine, pretty(mnode))
-      else:
-        print(colAquamarine, $(mnode))
+
+    var mnode: JsonNode
+
+    if response.kind == frError:
+      var resbuf = MsgStream.init(response.result.buf.data)
+      var err: FastRpcError
+      resbuf.setPosition(0)
+      resbuf.unpack(err)
+      if not opts.quiet and not opts.noprint:
+        print(colRed, repr err)
+    else:
+      var resbuf = MsgStream.init(response.result.buf.data)
+      mnode = resbuf.toJsonNode()
+      if not opts.quiet and not opts.noprint:
+        if opts.prettyPrint:
+          print(colBlue, pretty(mnode))
+        else:
+          print(colBlue, $(mnode))
 
     if not opts.quiet and not opts.noprint:
       print colGreen, "[rpc done at " & $now() & "]"
@@ -153,10 +166,10 @@ proc runRpc(opts: RpcOptions, req: FastRpcRequest) =
     print(colBlue, "[call: ", repr call, "]")
 
     for i in 1..opts.count:
-      try:
+      # try:
         discard client.execRpc(i, call, opts)
-      except Exception:
-        print(colRed, "[exception: ", getCurrentExceptionMsg() ,"]")
+      # except Exception:
+        # print(colRed, "[exception: ", getCurrentExceptionMsg() ,"]")
 
     while opts.keepalive:
       let mb = client.recv(4096, timeout = -1)

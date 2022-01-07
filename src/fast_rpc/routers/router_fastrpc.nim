@@ -63,6 +63,15 @@ proc wrapResponseError*(id: FastRpcId, err: FastRpcError): FastRpcResponse =
   ss.pack(err)
   result.result = (buf: ss)
 
+proc wrapResponseError*(id: FastRpcId, code: FastErrorCodes, msg: string, err: ref Exception, stacktraces: bool): FastRpcResponse = 
+  let errobj = FastRpcError(code: SERVER_ERROR, msg: msg)
+  if stacktraces and not err.isNil():
+    errobj.trace = @[]
+    for se in err.getStackTraceEntries():
+      let file: string = rsplit($(se.filename), '/', maxsplit=1)[^1]
+      errobj.trace.add( ($se.procname, file, se.line, ) )
+  result = wrapResponseError(id, errobj)
+
 proc parseError*(ss: MsgBuffer): FastRpcError = 
   ss.unpack(result)
 
@@ -105,21 +114,25 @@ proc handleRoute*[P](
         try:
           when typeof(rpcProc) is FastRpcSysProc:
             let ctx = RpcSystemContext(sender: sender, router: router)
-            let res: FastRpcParamsBuffer = rpcProc(req.params, ctx)
           else:
-            let res: FastRpcParamsBuffer = rpcProc(req.params, sender)
+            let ctx = RpcContext(sender: sender)
+          let res: FastRpcParamsBuffer = rpcProc(req.params, ctx)
           result = FastRpcResponse(kind: frResponse, id: req.id, result: res)
         except ObjectConversionDefect as err:
-          var errobj = FastRpcError(code: INVALID_PARAMS, msg: req.procName & " raised an exception")
-          if router.stacktraces:
-            errobj.trace = err.getStackTraceEntries()
-          result = wrapResponseError(req.id, errobj)
+          result = wrapResponseError(
+                      req.id,
+                      INVALID_PARAMS,
+                      req.procName & " raised an exception",
+                      err, 
+                      router.stacktraces)
         except CatchableError as err:
           # TODO: fix wrapping exception...
-          let errobj = FastRpcError(code: SERVER_ERROR, msg: req.procName & " raised an exception")
-          if router.stacktraces:
-            errobj.trace = err.getStackTraceEntries()
-          result = wrapResponseError(req.id, errobj)
+          result = wrapResponseError(
+                      req.id,
+                      INVALID_PARAMS,
+                      req.procName & " raised an exception",
+                      err, 
+                      router.stacktraces)
 
 proc route*(router: FastRpcRouter,
             req: FastRpcRequest,
@@ -180,7 +193,7 @@ macro rpc*(p: untyped): untyped =
     paramTypes = mkParamsType(paramsIdent, paramTypeName, parameters)
     procBody = if body.kind == nnkStmtList: body else: body.body
 
-  let ContextType = if syspragma.isNil: ident "SocketClientSender"
+  let ContextType = if syspragma.isNil: ident "RpcContext"
                     else: ident "RpcSystemContext"
   let ReturnType = if parameters.hasReturnType: parameters[0]
                    else: ident "FastRpcParamsBuffer"

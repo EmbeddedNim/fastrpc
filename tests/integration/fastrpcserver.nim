@@ -1,10 +1,8 @@
+import std/monotimes, std/os
+
 import fast_rpc/socketserver
 import fast_rpc/routers/router_fastrpc
 import fast_rpc/socketserver/fast_rpc_impl
-
-import std/monotimes
-import macros
-
 
 const
   VERSION = "1.0.0"
@@ -28,11 +26,27 @@ rpc_methods(rpcExample):
     echo("echos: ", "hello ", msg)
     result = "hello: " & msg
 
+  proc echorepeat(msg: string, count: int): string {.rpc.} =
+    let rmsg = "hello " & msg
+    for i in 0..count:
+      echo("echos: ", rmsg)
+      discard context.sender(rmsg)
+    result = "done"
+
   proc testerror(msg: string): string {.rpc.} =
     echo("test error: ", "what is your favorite color?")
     if msg != "Blue":
       raise newException(ValueError, "wrong answer!")
     result = "correct: " & msg
+
+  # proc tickmicros(delayms: int, context: RpcContext): string {.rpc, subscription, thread.} =
+  #   os.sleep(delayms)
+  #   var value: JsonNode = %* {"subscription": context.subId, "result": ts}
+  #   var msg: string = value.rpcPack()
+
+  #   let res = sender(msg)
+  #   if not res: break
+  #   os.sleep(delay)
 
 when isMainModule:
   let inetAddrs = [
