@@ -17,6 +17,7 @@ requires "https://github.com/EmbeddedNim/mcu_utils.git#main"
 
 task build_integration_tests, "build integration test tools":
   exec "nim c tests/integration/fastrpcserver.nim"
+  exec "nim c tests/integration/fastrpccli.nim"
   exec "nim c tests/integration/rpcmpackpubsubserver.nim"
   exec "nim c tests/integration/rpcmpackserver.nim"
   exec "nim c tests/integration/rpcmpackcli.nim"
@@ -24,3 +25,5 @@ task build_integration_tests, "build integration test tools":
   exec "nim c tests/integration/udpechoserver.nim"
   exec "nim c tests/integration/combechoserver.nim"
 
+after test:
+  build_integration_testsTask()
