@@ -58,9 +58,12 @@ proc senderClosure*(sourceClient: Socket): SocketClientSender =
           logDebug("sending prefix msg size: ", repr(datasz))
           sourceClient.sendSafe(datasz & data)
           return true
+        except OSError:
+          raise newException(InetClientDisconnected, "client error")
         except Exception as err:
           logException(err, "socker sender:", lvlError)
           return false
+
 
 proc senderClosure*(sourceClient: Socket, host: IpAddress, port: Port): SocketClientSender =
   capture sourceClient, host, port:
@@ -69,6 +72,8 @@ proc senderClosure*(sourceClient: Socket, host: IpAddress, port: Port): SocketCl
         try:
           sourceClient.sendTo(host, port, data)
           return true
+        except OSError:
+          raise newException(InetClientDisconnected, "client error")
         except Exception as err:
           logException(err, "socket sender:", lvlError)
           return false

@@ -80,6 +80,52 @@ proc execRpc( client: Socket, i: int, call: var FastRpcRequest, opts: RpcOptions
     ss.pack(call)
     let mcall = ss.data
 
+    template readResponse(): untyped = 
+      var msgLenBytes = client.recv(2, timeout = -1)
+      if msgLenBytes.len() == 0:
+        print(colGray, "[socket read: 0, return]")
+        return
+      var msgLen: int16 = msgLenBytes.lengthFromBigendian16()
+      if not opts.quiet and not opts.noprint:
+        print(colGray, "[socket read:data:lenstr: " & repr(msgLenBytes) & "]")
+        print(colGray, "[socket read:data:len: " & repr(msgLen) & "]")
+
+      var msg = ""
+      while msg.len() < msgLen:
+        if not opts.quiet and not opts.noprint:
+          print(colGray, "[reading msg]")
+        let mb = client.recv(4096, timeout = -1)
+        if not opts.quiet and not opts.noprint:
+          print(colGray, "[read bytes: " & $mb.len() & "]")
+        msg.add mb
+      if not opts.quiet and not opts.noprint:
+        print(colGray, "[socket data: " & repr(msg) & "]")
+
+      if not opts.quiet and not opts.noprint:
+        print colGray, "[read bytes: ", $msg.len(), "]"
+        print colGray, "[read: ", repr(msg), "]"
+
+      var rbuff = MsgBuffer.init(msg)
+      var response: FastRpcResponse
+      rbuff.unpack(response)
+
+      if not opts.quiet and not opts.noprint:
+        print colGray, "[read response: ", repr response, "]"
+      response
+
+    template prettyPrintResults(response: untyped): untyped = 
+      var resbuf = MsgStream.init(response.result.buf.data)
+      mnode = resbuf.toJsonNode()
+      if not opts.quiet and not opts.noprint:
+        if opts.prettyPrint:
+          print(colOrange, pretty(mnode))
+        else:
+          print(colOrange, $(mnode))
+
+    template parseReultsJson(response: untyped): untyped = 
+      var resbuf = MsgStream.init(response.result.buf.data)
+      resbuf.toJsonNode()
+
     timeBlock("call", opts):
       let msz = mcall.len().int16.lengthBigendian16()
       if not opts.quiet and not opts.noprint:
@@ -88,39 +134,8 @@ proc execRpc( client: Socket, i: int, call: var FastRpcRequest, opts: RpcOptions
       # client.send( msz )
       client.send( msz & mcall )
 
-      template readResponse(): untyped = 
-        var msgLenBytes = client.recv(2, timeout = -1)
-        if msgLenBytes.len() == 0:
-          print(colGray, "[socket read: 0, return]")
-          return
-        var msgLen: int16 = msgLenBytes.lengthFromBigendian16()
-        if not opts.quiet and not opts.noprint:
-          print(colGray, "[socket read:data:lenstr: " & repr(msgLenBytes) & "]")
-          print(colGray, "[socket read:data:len: " & repr(msgLen) & "]")
+      var response = readResponse()
 
-        var msg = ""
-        while msg.len() < msgLen:
-          if not opts.quiet and not opts.noprint:
-            print(colGray, "[reading msg]")
-          let mb = client.recv(4096, timeout = -1)
-          if not opts.quiet and not opts.noprint:
-            print(colGray, "[read bytes: " & $mb.len() & "]")
-          msg.add mb
-        if not opts.quiet and not opts.noprint:
-          print(colGray, "[socket data: " & repr(msg) & "]")
-
-        if not opts.quiet and not opts.noprint:
-          print colGray, "[read bytes: ", $msg.len(), "]"
-          print colGray, "[read: ", repr(msg), "]"
-
-        var rbuff = MsgBuffer.init(msg)
-        var response: FastRpcResponse
-        rbuff.unpack(response)
-
-        response
-
-
-    var response = readResponse()
     # var mnode: JsonNode = msg.toJsonNode()
     # var mres: JsonNode = mnode[3]
     if not opts.quiet and not opts.noprint:
@@ -132,14 +147,13 @@ proc execRpc( client: Socket, i: int, call: var FastRpcRequest, opts: RpcOptions
 
     var mnode: JsonNode
 
+    if opts.subscribe:
+      response = readResponse()
+      response.prettyPrintResults()
+
     while response.kind == frPublish:
-      var resbuf = MsgStream.init(response.result.buf.data)
-      mnode = resbuf.toJsonNode()
-      if not opts.quiet and not opts.noprint:
-        if opts.prettyPrint:
-          print(colOrange, pretty(mnode))
-        else:
-          print(colOrange, $(mnode))
+      mnode = response.parseReultsJson()
+      response.prettyPrintResults()
 
       response = readResponse()
 
@@ -151,13 +165,7 @@ proc execRpc( client: Socket, i: int, call: var FastRpcRequest, opts: RpcOptions
       if not opts.quiet and not opts.noprint:
         print(colRed, repr err)
     else:
-      var resbuf = MsgStream.init(response.result.buf.data)
-      mnode = resbuf.toJsonNode()
-      if not opts.quiet and not opts.noprint:
-        if opts.prettyPrint:
-          print(colOrange, pretty(mnode))
-        else:
-          print(colOrange, $(mnode))
+      response.prettyPrintResults()
 
     if not opts.quiet and not opts.noprint:
       print colGreen, "[rpc done at " & $now() & "]"

@@ -1,6 +1,8 @@
-import tables, strutils, macros
+import tables, strutils, macros, os
+
 import mcu_utils/basictypes
 import mcu_utils/msgbuffer
+import mcu_utils/logging
 
 import msgpack4nim
 export msgpack4nim
@@ -88,6 +90,16 @@ proc wrapResponseError*(id: FastRpcId, code: FastErrorCodes, msg: string, err: r
       errobj.trace.add( ($se.procname, file, se.line, ) )
   result = wrapResponseError(id, errobj)
 
+proc rpcReply*[T](context: RpcContext, value: T, kind: FastRpcType): bool =
+  ## TODO: FIXME
+  ## this turned out kind of ugly... 
+  ## but it works, think it'll work for subscriptions too 
+  var packed: FastRpcParamsBuffer = rpcPack(value)
+  let res: FastRpcResponse = wrapResponse(context.id, packed, kind)
+  var so = MsgBuffer.init(res.result.buf.data.len() + sizeof(res))
+  so.pack(res)
+  return context.sender(so.data)
+
 proc parseError*(ss: MsgBuffer): FastRpcError = 
   ss.unpack(result)
 
@@ -172,8 +184,14 @@ proc route*(router: FastRpcRouter,
                   router.stacktraces)
 
 proc threadRunner(args: FastRpcThreadArg) =
-  let fn = args[0]
-  discard fn(args[1], args[2])
+  try:
+    os.sleep(1)
+    let fn = args[0]
+    var val = fn(args[1], args[2])
+    discard rpcReply(args[2], val, frPublishDone)
+  except InetClientDisconnected:
+    logWarn("client disconnected for subscription")
+    discard
 
 
 # ========================= Define RPC Server ========================= #
@@ -181,6 +199,7 @@ template mkSubscriptionMethod(rpcfunc: FastRpcProc): FastRpcProc =
 
   when compiles(typeof Thread):
     proc rpcPublishThread(params: FastRpcParamsBuffer, context: RpcContext): FastRpcParamsBuffer {.gcsafe, nimcall.} =
+      echo "rpcPublishThread: ", repr params
       let subid = randBinString()
       context.router.threads[subid] = Thread[FastRpcThreadArg]()
       let args: (FastRpcProc, FastRpcParamsBuffer, RpcContext) = (rpcfunc, params, context)
@@ -277,6 +296,7 @@ macro rpcImpl*(p: untyped, publish: untyped): untyped =
   result.add quote do:
     proc `rpcMethod`(params: FastRpcParamsBuffer, context: `ContextType`): FastRpcParamsBuffer {.gcsafe, nimcall.} =
       var obj: `paramTypeName`
+      echo "`rpcMethod` ", repr(params) 
       obj.rpcUnpack(params)
 
       let res = `procName`(obj, context)
@@ -348,11 +368,4 @@ template rpc_methods*(name, blk: untyped): untyped =
     `name`(result)
 
 template rpcReply*(value: untyped): untyped =
-  ## TODO: FIXME
-  ## this turned out kind of ugly... 
-  ## but it works, think it'll work for subscriptions too 
-  var packed: FastRpcParamsBuffer = rpcPack(value)
-  let res: FastRpcResponse = wrapResponse(context.id, packed, frPublish)
-  var so = MsgBuffer.init(res.result.buf.data.len() + sizeof(res))
-  so.pack(res)
-  context.sender(so.data)
+  rpcReply(context, value, frPublish)

@@ -27,14 +27,15 @@ type
 type
   FastRpcType* {.size: sizeof(uint8).} = enum
     # Fast RPC Types
-    frRequest     = 5
-    frResponse    = 6
-    frNotify      = 7 # Unsupported
-    frError       = 8
-    frSubscribe   = 9
-    frPublish     = 10
-    frSystemRequest = 11
-    frUnsupported = 23
+    frRequest       = 5
+    frResponse      = 6
+    frNotify        = 7
+    frError         = 8
+    frSubscribe     = 9
+    frPublish       = 10
+    frPublishDone   = 11
+    frSystemRequest = 18
+    frUnsupported   = 20
     # rtpMax = 23 # numbers less than this store in single mpack/cbor byte
 
   FastRpcParamsBuffer* = tuple[buf: MsgBuffer]
