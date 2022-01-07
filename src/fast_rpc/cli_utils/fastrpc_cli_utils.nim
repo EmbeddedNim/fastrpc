@@ -71,6 +71,49 @@ var
   id: int = 1
   allTimes = newSeq[int64]()
 
+template readResponse(): untyped = 
+  var msgLenBytes = client.recv(2, timeout = -1)
+  if msgLenBytes.len() == 0:
+    print(colGray, "[socket read: 0, return]")
+    return
+  var msgLen: int16 = msgLenBytes.lengthFromBigendian16()
+  if not opts.quiet and not opts.noprint:
+    print(colGray, "[socket read:data:lenstr: " & repr(msgLenBytes) & "]")
+    print(colGray, "[socket read:data:len: " & repr(msgLen) & "]")
+
+  var msg = ""
+  while msg.len() < msgLen:
+    if not opts.quiet and not opts.noprint:
+      print(colGray, "[reading msg]")
+    let mb = client.recv(4096, timeout = -1)
+    if not opts.quiet and not opts.noprint:
+      print(colGray, "[read bytes: " & $mb.len() & "]")
+    msg.add mb
+  if not opts.quiet and not opts.noprint:
+    print(colGray, "[socket data: " & repr(msg) & "]")
+
+  if not opts.quiet and not opts.noprint:
+    print colGray, "[read bytes: ", $msg.len(), "]"
+    print colGray, "[read: ", repr(msg), "]"
+
+  var rbuff = MsgBuffer.init(msg)
+  var response: FastRpcResponse
+  rbuff.unpack(response)
+
+  if not opts.quiet and not opts.noprint:
+    print colAquamarine, "[response:kind: ", repr(response.kind), "]"
+    print colAquamarine, "[read response: ", repr response, "]"
+  response
+
+template prettyPrintResults(response: untyped): untyped = 
+  var resbuf = MsgStream.init(response.result.buf.data)
+  mnode = resbuf.toJsonNode()
+  if not opts.quiet and not opts.noprint:
+    if opts.prettyPrint:
+      print(colOrange, pretty(mnode))
+    else:
+      print(colOrange, $(mnode))
+
 proc execRpc( client: Socket, i: int, call: var FastRpcRequest, opts: RpcOptions): JsonNode = 
   {.cast(gcsafe).}:
     call.id = id
@@ -79,48 +122,6 @@ proc execRpc( client: Socket, i: int, call: var FastRpcRequest, opts: RpcOptions
     var ss = MsgBuffer.init()
     ss.pack(call)
     let mcall = ss.data
-
-    template readResponse(): untyped = 
-      var msgLenBytes = client.recv(2, timeout = -1)
-      if msgLenBytes.len() == 0:
-        print(colGray, "[socket read: 0, return]")
-        return
-      var msgLen: int16 = msgLenBytes.lengthFromBigendian16()
-      if not opts.quiet and not opts.noprint:
-        print(colGray, "[socket read:data:lenstr: " & repr(msgLenBytes) & "]")
-        print(colGray, "[socket read:data:len: " & repr(msgLen) & "]")
-
-      var msg = ""
-      while msg.len() < msgLen:
-        if not opts.quiet and not opts.noprint:
-          print(colGray, "[reading msg]")
-        let mb = client.recv(4096, timeout = -1)
-        if not opts.quiet and not opts.noprint:
-          print(colGray, "[read bytes: " & $mb.len() & "]")
-        msg.add mb
-      if not opts.quiet and not opts.noprint:
-        print(colGray, "[socket data: " & repr(msg) & "]")
-
-      if not opts.quiet and not opts.noprint:
-        print colGray, "[read bytes: ", $msg.len(), "]"
-        print colGray, "[read: ", repr(msg), "]"
-
-      var rbuff = MsgBuffer.init(msg)
-      var response: FastRpcResponse
-      rbuff.unpack(response)
-
-      if not opts.quiet and not opts.noprint:
-        print colGray, "[read response: ", repr response, "]"
-      response
-
-    template prettyPrintResults(response: untyped): untyped = 
-      var resbuf = MsgStream.init(response.result.buf.data)
-      mnode = resbuf.toJsonNode()
-      if not opts.quiet and not opts.noprint:
-        if opts.prettyPrint:
-          print(colOrange, pretty(mnode))
-        else:
-          print(colOrange, $(mnode))
 
     template parseReultsJson(response: untyped): untyped = 
       var resbuf = MsgStream.init(response.result.buf.data)
@@ -136,20 +137,14 @@ proc execRpc( client: Socket, i: int, call: var FastRpcRequest, opts: RpcOptions
 
       var response = readResponse()
 
-    # var mnode: JsonNode = msg.toJsonNode()
-    # var mres: JsonNode = mnode[3]
-    if not opts.quiet and not opts.noprint:
-      print colOrange, "[response:kind: ", repr(response.kind), "]"
-
-    if not opts.quiet and not opts.noprint:
-      print("")
-      print(colAquamarine, repr response)
-
     var mnode: JsonNode
 
     if opts.subscribe:
+      var resbuf = MsgStream.init(response.result.buf.data)
+      mnode = resbuf.toJsonNode()
+      if not opts.quiet and not opts.noprint:
+        print colAquamarine, "[response:kind: ", repr(response.kind), "]"
       response = readResponse()
-      response.prettyPrintResults()
 
     while response.kind == frPublish:
       mnode = response.parseReultsJson()

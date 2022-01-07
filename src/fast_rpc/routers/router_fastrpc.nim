@@ -201,10 +201,11 @@ template mkSubscriptionMethod(rpcfunc: FastRpcProc): FastRpcProc =
     proc rpcPublishThread(params: FastRpcParamsBuffer, context: RpcContext): FastRpcParamsBuffer {.gcsafe, nimcall.} =
       echo "rpcPublishThread: ", repr params
       let subid = randBinString()
+      context.id = subid
       context.router.threads[subid] = Thread[FastRpcThreadArg]()
       let args: (FastRpcProc, FastRpcParamsBuffer, RpcContext) = (rpcfunc, params, context)
       createThread(context.router.threads[subid], threadRunner, args)
-      result = rpcPack(subid)
+      result = rpcPack(("subscription", subid,))
 
     rpcPublishThread
   else:
@@ -296,7 +297,6 @@ macro rpcImpl*(p: untyped, publish: untyped): untyped =
   result.add quote do:
     proc `rpcMethod`(params: FastRpcParamsBuffer, context: `ContextType`): FastRpcParamsBuffer {.gcsafe, nimcall.} =
       var obj: `paramTypeName`
-      echo "`rpcMethod` ", repr(params) 
       obj.rpcUnpack(params)
 
       let res = `procName`(obj, context)
@@ -369,3 +369,6 @@ template rpc_methods*(name, blk: untyped): untyped =
 
 template rpcReply*(value: untyped): untyped =
   rpcReply(context, value, frPublish)
+
+template rpcPublish*(arg: untyped): untyped =
+  rpcReply(context, arg, frPublish)

@@ -80,21 +80,21 @@ type
     sender*: SocketClientSender
     router*: FastRpcRouter
 
-  BinString* = distinct string
+  BinString* = int
 
   FastRpcThreadArg* = (FastRpcProc, FastRpcParamsBuffer, RpcContext)
 
-proc `$`*(val: BinString): string {.borrow.}
-proc `hash`*(x: BinString): Hash {.borrow.}
-proc `==`*(x, y: BinString): bool {.borrow.}
+# proc `$`*(val: BinString): string {.borrow.}
+# proc `hash`*(x: BinString): Hash {.borrow.}
+# proc `==`*(x, y: BinString): bool {.borrow.}
 
 proc randBinString*(): BinString =
-  var idarr: array[8, byte]
+  var idarr: array[sizeof(int), byte]
   result =
     if urandom(idarr):
-      BinString($(cast[cstring](addr idarr)))
+      BinString(cast[int](idarr))
     else:
-      BinString("")
+      BinString(0)
 
 proc newFastRpcRouter*(): FastRpcRouter =
   new(result)
@@ -116,14 +116,14 @@ proc listSysMethods*(rt: FastRpcRouter): seq[string] =
   for name in rt.sysprocs.keys():
     result.add name
 
-# pack/unpack BinString
-proc pack_type*[ByteStream](s: ByteStream, val: BinString) =
-  s.pack_bin(len(val.string))
-  s.write(val.string)
+# # pack/unpack BinString
+# proc pack_type*[ByteStream](s: ByteStream, val: BinString) =
+#   s.pack_bin(len(val.string))
+#   s.write(val.string)
 
-proc unpack_type*[ByteStream](s: ByteStream, val: var BinString) =
-  let bstr = s.unpack_bin()
-  val = BinString(s.readStr(bstr))
+# proc unpack_type*[ByteStream](s: ByteStream, val: var BinString) =
+#   let bstr = s.unpack_bin()
+#   val = BinString(s.readStr(bstr))
 
 # pack/unpack MsgBuffer
 proc pack_type*[ByteStream](s: ByteStream, x: FastRpcParamsBuffer) =

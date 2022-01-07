@@ -36,11 +36,11 @@ rpc_methods(rpcExample):
       os.sleep(400)
     result = "k bye"
 
-  proc echopub(msg: string, count: int): int {.rpcPublisherThread().} =
+  proc microspub(count: int): int {.rpcPublisherThread().} =
     # var subid = subs.subscribeWithThread(context, run_micros, % delay)
-    let rmsg = "hello " & msg
     while true:
-      discard rpcReply(rmsg)
+      var ts = int(getMonoTime().ticks() div 1000)
+      discard rpcPublish(ts)
       os.sleep(count)
 
   proc testerror(msg: string): string {.rpc.} =

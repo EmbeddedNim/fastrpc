@@ -111,6 +111,6 @@ template customPacketRpcHandler*(name, rpcExec: untyped): untyped =
     # process rpc
     var response = `rpcExec`(data.router, move buffer, sender)
 
-    logDebug("msg: data: ", repr(response))
+    # logDebug("msg: data: ", repr(response))
     discard sender(response)
 
