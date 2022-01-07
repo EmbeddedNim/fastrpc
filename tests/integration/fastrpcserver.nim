@@ -56,12 +56,8 @@ when isMainModule:
     newInetAddr("0.0.0.0", 5656, Protocol.IPPROTO_TCP),
   ]
 
-  echo "main: ROUTER: "
+  echo "running fast rpc example"
   var router = rpcExample()
-  # var router = newFastRpcRouter()
-  # rpcExample(router)
   for rpc in router.procs.keys():
     echo "  rpc: ", rpc
   startSocketServer(inetAddrs, newFastRpcServer(router, prefixMsgSize=true))
-  # var rpc = rpc_server()
-  # echo "rpc: ", repr rpc

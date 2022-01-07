@@ -96,6 +96,18 @@ proc newFastRpcRouter*(): FastRpcRouter =
   # result.sysprocs = initTable[string, FastRpcProc]()
   result.stacktraces = defined(debug)
 
+proc listMethods*(rt: FastRpcRouter): seq[string] =
+  ## list the methods in the given router. 
+  var names = newSeqOfCap[string](rt.procs.len())
+  for name in rt.procs.keys():
+    names.add name
+
+proc listSysMethods*(rt: FastRpcRouter): seq[string] =
+  ## list the methods in the given router. 
+  var names = newSeqOfCap[string](rt.sysprocs.len())
+  for name in rt.sysprocs.keys():
+    names.add name
+
 # pack/unpack BinString
 proc `$`*(val: BinString): string {.borrow.}
 
