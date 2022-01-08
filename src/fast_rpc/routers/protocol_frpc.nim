@@ -116,25 +116,14 @@ proc listSysMethods*(rt: FastRpcRouter): seq[string] =
   for name in rt.sysprocs.keys():
     result.add name
 
-# # pack/unpack BinString
-# proc pack_type*[ByteStream](s: ByteStream, val: BinString) =
-#   s.pack_bin(len(val.string))
-#   s.write(val.string)
-
-# proc unpack_type*[ByteStream](s: ByteStream, val: var BinString) =
-#   let bstr = s.unpack_bin()
-#   val = BinString(s.readStr(bstr))
-
 # pack/unpack MsgBuffer
 proc pack_type*[ByteStream](s: ByteStream, x: FastRpcParamsBuffer) =
-  s.pack_ext(x.buf.data.len(), EXT_TAG_EMBEDDED_ARGS)
   s.write(x.buf.data, x.buf.pos)
 
 proc unpack_type*[ByteStream](s: ByteStream, x: var FastRpcParamsBuffer) =
-  let (extype, extlen) = s.unpack_ext()
-  var extbody = s.readStr(extlen)
+  var params = s.readStrRemaining()
   x.buf = MsgBuffer.init()
-  shallowCopy(x.buf.data, extbody)
+  shallowCopy(x.buf.data, params)
 
 proc rpcPack*(res: FastRpcParamsBuffer): FastRpcParamsBuffer {.inline.} =
   result = res
