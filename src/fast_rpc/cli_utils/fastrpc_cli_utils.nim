@@ -85,7 +85,7 @@ template readResponse(): untyped =
   while msg.len() < msgLen:
     if not opts.quiet and not opts.noprint:
       print(colGray, "[reading msg]")
-    let mb = client.recv(4096, timeout = -1)
+    let mb = client.recv(msgLen, timeout = -1)
     if not opts.quiet and not opts.noprint:
       print(colGray, "[read bytes: " & $mb.len() & "]")
     msg.add mb
