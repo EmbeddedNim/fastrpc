@@ -9,7 +9,7 @@ const
 
 
 # Define RPC Server #
-rpc_methods(rpcExample):
+rpcRegisterMethodsProc(name=initRpcExampleRouter):
 
   proc add(a: int, b: int): int {.rpc.} =
     result = 1 + a + b
@@ -56,7 +56,7 @@ when isMainModule:
   ]
 
   echo "running fast rpc example"
-  var router = rpcExample()
+  var router = initRpcExampleRouter()
   for rpc in router.procs.keys():
     echo "  rpc: ", rpc
   startSocketServer(inetAddrs, newFastRpcServer(router, prefixMsgSize=true))

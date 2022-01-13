@@ -334,38 +334,71 @@ proc addStandardSyscalls*(router: var FastRpcRouter) =
     let sysnames = context.router.listSysMethods()
     result = %* {"methods": names, "system": sysnames}
 
-template rpc_methods*(name, blk: untyped): untyped =
-  ## Define a proc called `name` that creates returns an RPC
-  ## router. The router will contain all the proc's in given
-  ## contained in the passed in code block that are
+template rpcRegisterMethodsProc*(name, blk: untyped): untyped =
+  ## Template to generate a proc called `procName`. This proc
+  ## configures and returns an RPC router.
+  ## 
+  ## The returned RPC router will have all the proc's
+  ## registered from the passed in code block that are
   ## tagged with the `rpc` pragma. 
   ## 
   ## For example:
   ## .. code-block:: nim
-  ##    rpc_methods(myRpcExample):
+  ##    rpcRegisterMethodsProc(name=initMyExampleRouter):
+  ## 
   ##      proc add(a: int, b: int): int {.rpc, system.} =
   ##        result = 1 + a + b
+  ## 
   ##      proc addAll(vals: seq[int]): int {.rpc.} =
   ##        for val in vals:
   ##          result = result + val
   ## 
-  ##    when isMainModule:
-  ##      let inetAddrs = [
-  ##        newInetAddr("0.0.0.0", 5656, Protocol.IPPROTO_TCP),
-  ##      ]
-  #   
-  ##      var router = myRpcExample()
-  ##      for rpc in router.procs.keys():
-  ##        echo "  rpc: ", rpc
-  ##      startSocketServer(inetAddrs, newFastRpcServer(router, prefixMsgSize=true))
+  ##    # Create a new router using our proc generated above:
+  ##    var router = initMyExampleRouter()
+  ## 
+  ##    # This will list out `add` and `addAll`:
+  ##    for rpc in router.procs.keys():
+  ##      echo "  rpc: ", rpc
+  ## 
+  ##    # Start a socker server
+  ##    let inetAddrs = [newInetAddr("0.0.0.0", 5656, Protocol.IPPROTO_TCP), ]
+  ##    startSocketServer(inetAddrs, newFastRpcServer(router, prefixMsgSize=true))
   ##    ```
   ## 
+  ## An alternative usage is to pass an existing router 
+  ## as an argument. The RPC methods will be registerd 
+  ## on this passed in router instead.
+  ## 
+  ## Example usage of appending RPC methods to a router:
+  ## .. code-block:: nim
+  ##    # Create some new RPC Router
+  ##    var router = mainRpcRouterExample()
+  ## 
+  ##    # call our previous init router proc to register methods 
+  ##    router.initMyExampleRouter()
+  ## 
+  ##    # This will print out all methods from
+  ##    # `mainRpcRouterExample` and `initMyExampleRouter`
+  ##    for rpc in router.procs.keys():
+  ##      echo "  rpc: ", rperror
+  ## 
+  ##    # Start a socker server
+  ##    let inetAddrs = [newInetAddr("0.0.0.0", 5656, Protocol.IPPROTO_TCP), ]
+  ##    startSocketServer(inetAddrs, newFastRpcServer(router, prefixMsgSize=true))
+  ##    ```
+  
   proc `name`*(router {.inject.}: var FastRpcRouter  ) =
+    ## Proc that registers all the methods in the `blk`
     blk
     router.addStandardSysCalls()
+
   proc `name`*(): FastRpcRouter =
+    ## convenience function to create a new router and init it
     result = newFastRpcRouter()
     `name`(result)
+
+template rpc_methods*(procName, blk: untyped): untyped =
+  error("change to new template name: rpcRegisterMethodsProc")
 
 template rpcReply*(value: untyped): untyped =
   rpcReply(context, value, frPublish)
