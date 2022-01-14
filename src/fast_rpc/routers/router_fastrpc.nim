@@ -197,7 +197,7 @@ proc threadRunner(args: FastRpcThreadArg) =
 # ========================= Define RPC Server ========================= #
 template mkSubscriptionMethod(rpcfunc: FastRpcProc): FastRpcProc = 
 
-  when compiles(typeof Thread):
+  when compileOption("threads"):
     proc rpcPublishThread(params: FastRpcParamsBuffer, context: RpcContext): FastRpcParamsBuffer {.gcsafe, nimcall.} =
       echo "rpcPublishThread: ", repr params
       let subid = randBinString()

@@ -72,7 +72,7 @@ type
     procs*: Table[string, FastRpcProc]
     sysprocs*: Table[string, FastRpcProc]
     stacktraces*: bool
-    when compiles(typeof Thread):
+    when compileOption("threads"):
       threads*: TableRef[BinString, Thread[FastRpcThreadArg]]
 
   RpcContext* = ref object
