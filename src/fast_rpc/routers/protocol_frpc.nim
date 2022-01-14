@@ -101,7 +101,7 @@ proc newFastRpcRouter*(): FastRpcRouter =
   result.procs = initTable[string, FastRpcProc]()
   # result.sysprocs = initTable[string, FastRpcProc]()
   result.stacktraces = defined(debug)
-  when compiles(typeof Thread):
+  when compileOption("threads"):
     result.threads = newTable[BinString, Thread[FastRpcThreadArg]]()
 
 proc listMethods*(rt: FastRpcRouter): seq[string] =
