@@ -46,14 +46,14 @@ proc processReads[T](selected: ReadyKey, srv: SocketServerInfo[T], data: T) =
       if srv.serverImpl.readHandler != nil:
         srv.serverImpl.readHandler(srv, selected, sourceClient, sourceType, data)
 
-    except InetClientDisconnected as err:
+    except InetClientDisconnected:
       var client: (Socket, SockType)
       discard srv.clients.pop(sourceFd.SocketHandle, client)
       srv.select.unregister(sourceFd)
       discard posix.close(sourceFd.cint)
       logError("client disconnected: fd: ", $sourceFd)
 
-    except InetClientError as err:
+    except InetClientError:
       srv.clients.del(sourceFd.SocketHandle)
       srv.select.unregister(sourceFd)
 

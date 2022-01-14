@@ -4,3 +4,5 @@ combechoserver
 rpcmpackserver
 rpcmpackcli
 rpcmpackpubsubserver
+fastrpcserver
+fastrpccli

@@ -58,7 +58,7 @@ template timeBlock(n: string, opts: RpcOptions, blk: untyped): untyped =
   blk
 
   let td = getTime() - t0
-  if not opts.noprint:
+  if not opts.quiet and not opts.noprint:
     print colGray, "[took: ", $(td.inMicroseconds().float() / 1e3), " millis]"
   totalCalls.inc()
   totalTime = totalTime + td.inMicroseconds()
@@ -85,14 +85,16 @@ proc execRpc( client: Socket, i: int, call: JsonNode, opts: RpcOptions): JsonNod
       client.send( mcall )
       var msgLenBytes = client.recv(4, timeout = -1)
       if msgLenBytes.len() == 0: return
-      var msgLen: int32 = msgLenBytes.lengthFromBigendian32()
-      print("[socket data:lenstr: " & repr(msgLenBytes) & "]")
-      print("[socket data:len: " & repr(msgLen) & "]")
+      var msgLen: int = msgLenBytes.lengthFromBigendian16()
+      if not opts.quiet and not opts.noprint:
+        print("[socket data:lenstr: " & repr(msgLenBytes) & "]")
+        print("[socket data:len: " & repr(msgLen) & "]")
 
       var msg = ""
       while msg.len() < msgLen:
-        print("[reading msg]")
-        let mb = client.recv(4096, timeout = -1)
+        if not opts.quiet and not opts.noprint:
+          print("[reading msg]")
+        let mb = client.recv(msgLen, timeout = -1)
         if not opts.quiet and not opts.noprint:
           print("[read bytes: " & $mb.len() & "]")
         msg.add mb
@@ -110,14 +112,14 @@ proc execRpc( client: Socket, i: int, call: JsonNode, opts: RpcOptions): JsonNod
       else:
         msg.toJsonNode()
 
-    if not opts.noprint:
+    if not opts.quiet and not opts.noprint:
       print("")
 
-    if not opts.noprint: 
+    if not opts.quiet and not opts.noprint:
       if opts.prettyPrint:
-        print(colAquamarine, pretty(mnode))
+        print(colAquamarine, "{result: ", pretty(mnode), "}")
       else:
-        print(colAquamarine, $(mnode))
+        print(colAquamarine, "{result: ", $(mnode), "}")
 
     if not opts.quiet and not opts.noprint:
       print colGreen, "[rpc done at " & $now() & "]"
@@ -125,6 +127,8 @@ proc execRpc( client: Socket, i: int, call: JsonNode, opts: RpcOptions): JsonNod
     if opts.delay > 0:
       os.sleep(opts.delay)
 
+    if not opts.quiet and not opts.noprint:
+      echo ""
     mnode
 
 proc initRpcCall(id=1): JsonNode =

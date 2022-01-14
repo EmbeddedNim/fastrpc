@@ -3,6 +3,8 @@ import json
 import msgpack4nim/msgpack2json
 
 import mcu_utils/logging
+import mcu_utils/msgbuffer
+
 import ../inet_types
 import ../routers/router_json
 
@@ -16,13 +18,16 @@ type
     bufferSize*: int
     prefixMsgSize*: bool
 
-proc mpackJrpcExec*(rt: RpcRouter, msg: var string, sender: SocketClientSender): string =
+proc mpackJrpcExec*(rt: RpcRouter,
+                    ss: sink MsgBuffer,
+                    sender: SocketClientSender
+                    ): string =
   logDebug("msgpack processing")
-  var rcall = msgpack2json.toJsonNode(msg)
+  var rcall = msgpack2json.toJsonNode(ss.data)
   var res: JsonNode = rt.route(rcall, sender)
   result = res.fromJsonNode()
 
-customPacketRpcHandler(packetMpackJRpcHandler, mpackJrpcExec, fromJsonNode)
+customPacketRpcHandler(packetMpackJRpcHandler, mpackJrpcExec)
 
 proc newMpackJRpcServer*(router: RpcRouter, bufferSize = 1400, prefixMsgSize = false): SocketServerImpl[JsonRpcOpts] =
   new(result)

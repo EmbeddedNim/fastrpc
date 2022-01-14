@@ -8,3 +8,5 @@ src/fast_rpc/transit
 udpclient
 udpserver
 rpc_udp_cli
+tests/integration/fastrpccli
+tests/integration/fastrpcserver

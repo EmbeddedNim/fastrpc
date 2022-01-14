@@ -194,6 +194,10 @@ proc calcActualParamCount(params: NimNode): int =
 
 proc jsonToNim*(params, jsonIdent: NimNode): NimNode =
   # Add code to verify input and load params into Nim types
+  echo "jsonToNim: "
+  echo "jsonToNim: params: ", params.treeRepr
+  echo "jsonToNim: jsonident: ", jsonident.treeRepr
+
   result = newStmtList()
   if not params.isNil:
     var minLength = 0
