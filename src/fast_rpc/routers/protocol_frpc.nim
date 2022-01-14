@@ -3,6 +3,8 @@ import std/sysrand
 import std/hashes
 
 import mcu_utils/msgbuffer
+include mcu_utils/threads
+
 import ../inet_types
 
 export tables
