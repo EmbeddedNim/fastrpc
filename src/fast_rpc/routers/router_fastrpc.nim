@@ -397,8 +397,8 @@ template rpcRegisterMethodsProc*(name, blk: untyped): untyped =
     result = newFastRpcRouter()
     `name`(result)
 
-template rpc_methods*(procName, blk: untyped): untyped =
-  error("change to new template name: rpcRegisterMethodsProc")
+template rpc_methods*(procName, blk: untyped): untyped {.deprecated: "use `rpcRegisterMethodsProc` instead".} =
+  rpcRegisterMethodsProc(procName, blk)
 
 template rpcReply*(value: untyped): untyped =
   rpcReply(context, value, frPublish)
