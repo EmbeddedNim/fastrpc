@@ -43,6 +43,18 @@ rpcRegisterMethodsProc(name=initRpcExampleRouter):
       discard rpcPublish(ts)
       os.sleep(count)
 
+  proc adcstream(count: int): seq[int] {.rpcPublisherThread().} =
+    # var subid = subs.subscribeWithThread(context, run_micros, % delay)
+    while true:
+      echo "adcstream ts'es"
+      var vals = newSeq[int]()
+      for i in 0..<20:
+        var ts = int(getMonoTime().ticks() div 1000)
+        vals.add ts
+      echo "adcstream publish"
+      discard rpcPublish(vals)
+      os.sleep(count)
+
   proc testerror(msg: string): string {.rpc.} =
     echo("test error: ", "what is your favorite color?")
     if msg != "Blue":
