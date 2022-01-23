@@ -2,6 +2,7 @@ import endians
 import sugar
 
 import mcu_utils/logging
+import mcu_utils/msgbuffer
 import ../inet_types
 
 # type
@@ -30,32 +31,24 @@ proc sendChunks*(sourceClient: Socket, rmsg: string, chunksize: int) =
     sourceClient.sendSafe(move sl)
     i = j
 
-proc lengthBigendian32*(ln: int): string =
-  var sz: int32 = ln.int32
-  result = newString(4)
-  bigEndian32(result.cstring(), addr sz)
-
-proc lengthFromBigendian32*(datasz: string): int32 =
-  result = 0
-  bigEndian32(addr result, datasz.cstring())
-
-proc lengthBigendian16*(ln: int16): string =
+proc toStrBe16*(str: var string, ln: int16) =
   var sz: int32 = ln.int16
+  bigEndian16(str.cstring(), addr sz)
+proc toStrBe16*(ln: int16): string =
   result = newString(2)
-  bigEndian16(result.cstring(), addr sz)
-
-proc lengthFromBigendian16*(datasz: string): int16 =
+  result.toStrBe16(ln)
+proc fromStrBe16*(datasz: string): int16 =
   assert datasz.len() >= 2
-  result = 0
   bigEndian16(addr result, datasz.cstring())
 
 proc senderClosure*(sourceClient: Socket): SocketClientSender =
+  var lenBuf = newString(2)
   capture sourceClient:
     result =
       proc (data: string): bool =
         try:
-          var datasz = data.len().int16.lengthBigendian16()
-          sourceClient.sendSafe(datasz & data)
+          lenBuf.toStrBe16(data.len().int16)
+          sourceClient.sendSafe(lenBuf & data)
           return true
         except OSError:
           raise newException(InetClientDisconnected, "client error")

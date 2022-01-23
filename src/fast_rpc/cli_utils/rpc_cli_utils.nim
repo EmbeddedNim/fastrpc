@@ -85,7 +85,7 @@ proc execRpc( client: Socket, i: int, call: JsonNode, opts: RpcOptions): JsonNod
       client.send( mcall )
       var msgLenBytes = client.recv(4, timeout = -1)
       if msgLenBytes.len() == 0: return
-      var msgLen: int = msgLenBytes.lengthFromBigendian16()
+      var msgLen: int = msgLenBytes.fromStrBe16()
       if not opts.quiet and not opts.noprint:
         print("[socket data:lenstr: " & repr(msgLenBytes) & "]")
         print("[socket data:len: " & repr(msgLen) & "]")

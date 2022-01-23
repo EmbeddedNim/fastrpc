@@ -76,7 +76,7 @@ template readResponse(): untyped =
   if msgLenBytes.len() == 0:
     print(colGray, "[socket read: 0, return]")
     return
-  var msgLen: int16 = msgLenBytes.lengthFromBigendian16()
+  var msgLen: int16 = msgLenBytes.fromStrBe16()
   if not opts.quiet and not opts.noprint:
     print(colGray, "[socket read:data:lenstr: " & repr(msgLenBytes) & "]")
     print(colGray, "[socket read:data:len: " & repr(msgLen) & "]")
@@ -128,7 +128,7 @@ proc execRpc( client: Socket, i: int, call: var FastRpcRequest, opts: RpcOptions
       resbuf.toJsonNode()
 
     timeBlock("call", opts):
-      let msz = mcall.len().int16.lengthBigendian16()
+      let msz = mcall.len().int16.toStrBe16()
       if not opts.quiet and not opts.noprint:
         print("[socket mcall bytes: " & repr(mcall.len()) & "]")
         print("[socket mcall bytes:lenprefix: " & repr msz & "]")
