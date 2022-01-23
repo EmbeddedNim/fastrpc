@@ -1,5 +1,5 @@
 import fast_rpc/socketserver_multi
-import fast_rpc/socketserver/echo_comb_impl
+import fast_rpc/socketserver/echo_comb_multi_impl
 
 # import nimprof
 

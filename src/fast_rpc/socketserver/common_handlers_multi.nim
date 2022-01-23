@@ -3,6 +3,8 @@ import sugar
 import mcu_utils/logging
 import mcu_utils/msgbuffer
 
+export msgbuffer 
+
 import ../inet_types
 import sockethelpers
 
@@ -34,41 +36,39 @@ proc senderClosure*(sourceClient: Socket, host: IpAddress, port: Port): SocketCl
           logException(err, "socket sender:", lvlError)
           return false
 
-template customPacketRpcHandler*(handlerName, rpcExec: untyped): untyped =
+proc readHandler*[T](srv: SocketServerInfo[T],
+                        result: ReadyKey,
+                        sourceClient: Socket,
+                        sourceType: SockType,
+                        data: T) =
+  var
+    buffer = MsgBuffer.init(data.bufferSize)
+    host: IpAddress
+    port: Port
 
-  proc `handlerName`*[T](srv: SocketServerInfo[T],
-                         result: ReadyKey,
-                         sourceClient: Socket,
-                         sourceType: SockType,
-                         data: T) =
-    var
-      buffer = MsgBuffer.init(data.bufferSize)
-      host: IpAddress
-      port: Port
+  buffer.pos = 0
+  var sender: SocketClientSender
 
-    buffer.setPosition(0)
-    var sender: SocketClientSender
+  # Get network data
+  if sourceType == SockType.SOCK_STREAM:
+    discard sourceClient.recv(buffer.data, data.bufferSize)
+    if buffer.data == "":
+      raise newException(InetClientDisconnected, "")
+    let
+      msglen = buffer.readUintBe16().int
+    if buffer.data.len() != 2 + msglen:
+      raise newException(OSError, "invalid length: read: " &
+                          $buffer.data.len() & " expect: " & $(2 + msglen))
+    sender = senderClosure(sourceClient)
+  elif sourceType == SockType.SOCK_DGRAM:
+    discard sourceClient.recvFrom(buffer.data, buffer.data.len(), host, port)
+    sender = senderClosure(sourceClient, host, port)
+  else:
+    raise newException(ValueError, "unhandled socket type: " & $sourceType)
 
-    # Get network data
-    if sourceType == SockType.SOCK_STREAM:
-      discard sourceClient.recv(buffer.data, data.bufferSize)
-      if buffer.data == "":
-        raise newException(InetClientDisconnected, "")
-      let
-        msglen = buffer.readUintBe16().int
-      if buffer.data.len() != 2 + msglen:
-        raise newException(OSError, "invalid length: read: " &
-                           $buffer.data.len() & " expect: " & $(2 + msglen))
-      sender = senderClosure(sourceClient)
-    elif sourceType == SockType.SOCK_DGRAM:
-      discard sourceClient.recvFrom(buffer.data, buffer.data.len(), host, port)
-      sender = senderClosure(sourceClient, host, port)
-    else:
-      raise newException(ValueError, "unhandled socket type: " & $sourceType)
+  # process rpc
+  var response = data.rpcExec(data, move buffer, sender)
 
-    # process rpc
-    var response = `rpcExec`(data.router, move buffer, sender)
-
-    # logDebug("msg: data: ", repr(response))
-    discard sender(response)
+  # logDebug("msg: data: ", repr(response))
+  discard sender(response)
 

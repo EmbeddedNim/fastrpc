@@ -2,17 +2,29 @@ import sets
 
 import mcu_utils/logging
 import ../inet_types
+import common_handlers_multi
 
 import hashes
 
 const EchoBufferSize = 1400
+
 type 
   EchoOpts = ref object
     knownClients*: HashSet[(InetAddress, Socket)]
     prompt*: string
     bufferSize*: int
+    rpcExec*: proc (data: EchoOpts, msg: MsgBuffer, sender: SocketClientSender): string
 
 proc hash*(sock: Socket): Hash = hash(sock.getFd())
+
+proc echoExec*(data: EchoOpts, msg: var string): string =
+  logDebug("msgpack processing")
+
+proc newJsonRpcServer*(): SocketServerImpl[EchoOpts] =
+  new(result)
+  result.readHandler = readHandler
+  result.writeHandler = nil 
+  result.data = new(EchoOpts) 
 
 proc sendAllClients*(srv: SocketServerInfo[EchoOpts],
                      data: EchoOpts,
@@ -51,7 +63,6 @@ proc echoReadHandler*(srv: SocketServerInfo[EchoOpts],
       port: Port
 
     discard sourceClient.recvFrom(message, message.len(), address, port)
-    data.knownClients.incl((InetAddress(host: address, port: port), sourceClient))
 
   else:
     raise newException(ValueError, "unhandled socket type: " & $sourceType)
