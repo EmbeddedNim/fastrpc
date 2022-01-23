@@ -22,6 +22,7 @@ type
     select*: Selector[T]
     servers*: ref Table[SocketHandle, Socket]
     clients*: ref Table[SocketHandle, (Socket, SockType)]
+    outgoing*: ref Table[SocketHandle, (Socket, SockType)]
     serverImpl*: SocketServerImpl[T]
 
   SocketServerHandler*[T] = proc (srv: SocketServerInfo[T],
@@ -67,6 +68,7 @@ proc createServerInfo*[T](selector: Selector[T],
   result.serverImpl = serverImpl
   result.servers = newTable[SocketHandle, Socket]()
   result.clients = newTable[SocketHandle, (Socket, SockType)]()
+  result.outgoing = newTable[SocketHandle, (Socket, SockType)]()
 
   for server in servers:
     result.servers[server.getFd()] = server
