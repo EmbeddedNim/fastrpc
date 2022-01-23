@@ -1,6 +1,10 @@
 import nativesockets, net, selectors, posix, tables
+import endians
 
 export nativesockets, net, selectors, posix, tables
+
+import mcu_utils/logging
+import mcu_utils/msgbuffer
 
 import json
 export json
@@ -33,12 +37,19 @@ type
     readHandler*: SocketServerHandler[T]
     writeHandler*: SocketServerHandler[T]
     postProcessHandler*: SocketServerProcessor[T]
+    when compileOption("threads"):
+      outgoing*: Channel[SocketClientMessage]
+
+  SocketClientMessage* = ref object
+    ss: MsgBuffer
 
   SocketClientSender* = proc (data: string): bool {.closure, gcsafe.}
+
 
 type 
   InetClientDisconnected* = object of OSError
   InetClientError* = object of OSError
+
 
 proc newInetAddr*(host: string, port: int, protocol = net.IPPROTO_TCP): InetAddress =
   result.host = parseIpAddress(host)

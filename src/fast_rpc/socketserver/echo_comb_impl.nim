@@ -8,8 +8,9 @@ import hashes
 const EchoBufferSize = 1400
 type 
   EchoOpts = ref object
-    knownClients: HashSet[(InetAddress, Socket)]
-    prompt: string
+    knownClients*: HashSet[(InetAddress, Socket)]
+    prompt*: string
+    bufferSize*: int
 
 proc hash*(sock: Socket): Hash = hash(sock.getFd())
 
@@ -70,3 +71,4 @@ proc newEchoServer*(prefix = "", selfEchoDisable = false): SocketServerImpl[Echo
   result.data = new(EchoOpts) 
   result.data.knownClients = initHashSet[(InetAddress, Socket)]()
   result.data.prompt = prefix
+  result.data.bufferSize = 1400
