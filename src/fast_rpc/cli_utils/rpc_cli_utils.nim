@@ -17,7 +17,7 @@ from cligen/argcvt import ArgcvtParams, argKeys         # Little helpers
 when not defined(TcpJsonRpcServer):
   import msgpack4nim/msgpack2json
 
-import fast_rpc/socketserver/common_handlers
+import fast_rpc/socketserver/sockethelpers
 
 enableTrueColors()
 proc print*(text: varargs[string]) =

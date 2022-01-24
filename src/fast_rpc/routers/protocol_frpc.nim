@@ -4,14 +4,12 @@ import std/hashes
 
 import mcu_utils/msgbuffer
 import ../inet_types
+import ../socketserver/sockethelpers
 
 export tables
 export inet_types
+export sockethelpers
 export msgbuffer
-
-## Code copied from: status-im/nim-json-rpc is licensed under the Apache License 2.0
-const
-  EXT_TAG_EMBEDDED_ARGS = 24 # copy CBOR's "embedded cbor data" tag
 
 type
   FastErrorCodes* = enum

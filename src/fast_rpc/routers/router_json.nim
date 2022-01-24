@@ -1,11 +1,12 @@
 import json, tables, strutils, macros, options
 import ../inet_types
+import ../socketserver/sockethelpers
 
 import marshal_json
 
 export marshal_json
 export tables
-export inet_types
+export inet_types, sockethelpers
 
 ## Code copied from: status-im/nim-json-rpc is licensed under the Apache License 2.0
 

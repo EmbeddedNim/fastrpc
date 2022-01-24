@@ -1,6 +1,7 @@
 
 import mcu_utils/logging
 import ../inet_types
+import ../socketserver/sockethelpers
 
 type 
   EchoOpts = ref object
