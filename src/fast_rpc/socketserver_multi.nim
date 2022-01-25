@@ -8,6 +8,7 @@ import posix
 
 import mcu_utils/logging
 import inet_types
+import socketserver/sockethelpers
 
 export inet_types
 

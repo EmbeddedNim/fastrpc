@@ -1,5 +1,6 @@
 import endians
 import sugar
+import os
 
 import mcu_utils/logging
 import mcu_utils/msgbuffer
@@ -81,20 +82,23 @@ proc fromStrBe16*(datasz: string): int16 =
   assert datasz.len() >= 2
   bigEndian16(addr result, datasz.cstring())
 
-proc newSocketPair*(sockType: SockType = SOCK_STREAM,
-                    protocol: Protocol = IPPROTO_TCP,
+proc newSocketPair*(sockType: SockType = SockType.SOCK_DGRAM,
+                    protocol: Protocol = Protocol.IPPROTO_IP,
+                    domain: Domain = Domain.AF_UNIX,
                     buffered = true,
                    ): (Socket, Socket) =
   ## create socket pairing 
-  let domain: Domain = net.AF_UNIX
 
+  dump([toInt(domain), toInt(sockType), toInt(protocol)])
   var socketFds: array[2, cint]
-  let status = posix.socketpair(toInt(domain),
+  let status = posix.socketpair(
+                             toInt(domain),
                              toInt(sockType),
                              toInt(protocol),
                              socketFds)
   if status != 0: 
-    raise newException(OSError, "error making socket pair")
+    raise newException(OSError, "error making socket pair: " &
+      osErrorMsg(OSErrorCode(status)))
 
   result[0] = newSocket(SocketHandle(socketFds[0]), domain,
                         sockType, protocol, buffered)
