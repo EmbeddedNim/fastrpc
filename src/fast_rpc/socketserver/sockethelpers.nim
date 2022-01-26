@@ -82,7 +82,7 @@ proc fromStrBe16*(datasz: string): int16 =
   assert datasz.len() >= 2
   bigEndian16(addr result, datasz.cstring())
 
-proc newSocketPair*(sockType: SockType = SockType.SOCK_DGRAM,
+proc newSocketPair*(sockType: SockType = SockType.SOCK_STREAM,
                     protocol: Protocol = Protocol.IPPROTO_IP,
                     domain: Domain = Domain.AF_UNIX,
                     buffered = true,

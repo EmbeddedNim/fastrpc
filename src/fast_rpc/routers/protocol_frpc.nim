@@ -2,6 +2,7 @@ import tables, macros, strutils
 import std/sysrand
 import std/hashes
 
+include mcu_utils/threads
 import mcu_utils/msgbuffer
 import ../inet_types
 import ../socketserver/sockethelpers
