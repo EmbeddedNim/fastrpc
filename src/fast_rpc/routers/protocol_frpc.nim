@@ -4,6 +4,8 @@ import std/hashes
 
 include mcu_utils/threads
 import mcu_utils/msgbuffer
+include mcu_utils/threads
+
 import ../inet_types
 import ../socketserver/sockethelpers
 
@@ -100,7 +102,7 @@ proc newFastRpcRouter*(): FastRpcRouter =
   result.procs = initTable[string, FastRpcProc]()
   # result.sysprocs = initTable[string, FastRpcProc]()
   result.stacktraces = defined(debug)
-  when compiles(typeof Thread):
+  when compileOption("threads"):
     result.threads = newTable[BinString, Thread[FastRpcThreadArg]]()
 
 proc listMethods*(rt: FastRpcRouter): seq[string] =

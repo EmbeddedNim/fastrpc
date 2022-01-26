@@ -3,6 +3,7 @@ import tables, strutils, macros, os
 import mcu_utils/basictypes
 import mcu_utils/msgbuffer
 import mcu_utils/logging
+include mcu_utils/threads
 
 import msgpack4nim
 export msgpack4nim
