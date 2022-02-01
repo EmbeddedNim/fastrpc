@@ -108,7 +108,7 @@ template readResponse(): untyped =
 template prettyPrintResults(response: untyped): untyped = 
   var resbuf = MsgStream.init(response.result.buf.data)
   mnode = resbuf.toJsonNode()
-  if not opts.quiet and not opts.noprint:
+  if not opts.noprint:
     if opts.prettyPrint:
       print(colOrange, pretty(mnode))
     else:
@@ -220,6 +220,7 @@ proc call(ip: IpAddress,
           port=Port(5656),
           dry_run=false,
           quiet=false,
+          silent=false,
           pretty=false,
           count=1,
           delay=0,
@@ -234,6 +235,7 @@ proc call(ip: IpAddress,
                         ipAddr: ip,
                         port: port,
                         quiet: quiet,
+                        noprint: silent,
                         dryRun: dry_run,
                         showstats: showstats,
                         prettyPrint: pretty,

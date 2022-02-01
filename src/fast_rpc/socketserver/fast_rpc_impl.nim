@@ -4,6 +4,7 @@ import msgpack4nim/msgpack2json
 
 import mcu_utils/logging
 import ../inet_types
+import ../socketserver/sockethelpers
 import ../routers/router_fastrpc
 
 import common_handlers

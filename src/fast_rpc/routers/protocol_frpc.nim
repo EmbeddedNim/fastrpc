@@ -2,16 +2,17 @@ import tables, macros, strutils
 import std/sysrand
 import std/hashes
 
+include mcu_utils/threads
 import mcu_utils/msgbuffer
+include mcu_utils/threads
+
 import ../inet_types
+import ../socketserver/sockethelpers
 
 export tables
 export inet_types
+export sockethelpers
 export msgbuffer
-
-## Code copied from: status-im/nim-json-rpc is licensed under the Apache License 2.0
-const
-  EXT_TAG_EMBEDDED_ARGS = 24 # copy CBOR's "embedded cbor data" tag
 
 type
   FastErrorCodes* = enum
@@ -101,7 +102,7 @@ proc newFastRpcRouter*(): FastRpcRouter =
   result.procs = initTable[string, FastRpcProc]()
   # result.sysprocs = initTable[string, FastRpcProc]()
   result.stacktraces = defined(debug)
-  when compiles(typeof Thread):
+  when compileOption("threads"):
     result.threads = newTable[BinString, Thread[FastRpcThreadArg]]()
 
 proc listMethods*(rt: FastRpcRouter): seq[string] =
