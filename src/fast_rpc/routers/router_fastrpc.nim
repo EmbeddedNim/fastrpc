@@ -196,10 +196,9 @@ proc threadRunner(args: FastRpcThreadArg) =
 
 
 # ========================= Define RPC Server ========================= #
-template mkSubscriptionMethod(rpcfunc: FastRpcProc): FastRpcProc = 
-
-  when compileOption("threads"):
-    proc rpcPublishThread(params: FastRpcParamsBuffer, context: RpcContext): FastRpcParamsBuffer {.gcsafe, nimcall.} =
+template mkSubscriptionMethod(rpcname: untyped, rpcfunc: untyped): untyped = 
+  let subproc =
+    proc (params: FastRpcParamsBuffer, context: RpcContext): FastRpcParamsBuffer {.gcsafe, nimcall.} =
       echo "rpcPublishThread: ", repr params
       let subid = randBinString()
       context.id = subid
@@ -207,11 +206,8 @@ template mkSubscriptionMethod(rpcfunc: FastRpcProc): FastRpcProc =
       let args: (FastRpcProc, FastRpcParamsBuffer, RpcContext) = (rpcfunc, params, context)
       createThread(context.router.threads[subid], threadRunner, args)
       result = rpcPack(("subscription", subid,))
-
-    rpcPublishThread
-  else:
-    error("must have threads enabled")
   
+  subproc
 
 
 macro rpcImpl*(p: untyped, publish: untyped): untyped =
@@ -306,7 +302,7 @@ macro rpcImpl*(p: untyped, publish: untyped): untyped =
   # Register rpc wrapper
   if pubthread:
     result.add quote do:
-      let subm: FastRpcProc = mkSubscriptionMethod(`rpcMethod`)
+      let subm: FastRpcProc = mkSubscriptionMethod(procName, `rpcMethod`)
       router.register(`path`, subm)
   elif syspragma:
     result.add quote do:
