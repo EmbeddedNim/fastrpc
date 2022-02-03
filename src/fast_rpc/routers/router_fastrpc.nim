@@ -184,31 +184,6 @@ proc route*(router: FastRpcRouter,
                   nil, 
                   router.stacktraces)
 
-proc threadRunner(args: FastRpcThreadArg) =
-  try:
-    os.sleep(1)
-    let fn = args[0]
-    var val = fn(args[1], args[2])
-    discard rpcReply(args[2], val, frPublishDone)
-  except InetClientDisconnected:
-    logWarn("client disconnected for subscription")
-    discard
-
-
-# ========================= Define RPC Server ========================= #
-template mkSubscriptionMethod(rpcname: untyped, rpcfunc: untyped): untyped = 
-  let subproc =
-    proc (params: FastRpcParamsBuffer, context: RpcContext): FastRpcParamsBuffer {.gcsafe, nimcall.} =
-      echo "rpcPublishThread: ", repr params
-      let subid = randBinString()
-      context.id = subid
-      context.router.threads[subid] = Thread[FastRpcThreadArg]()
-      let args: (FastRpcProc, FastRpcParamsBuffer, RpcContext) = (rpcfunc, params, context)
-      createThread(context.router.threads[subid], threadRunner, args)
-      result = rpcPack(("subscription", subid,))
-  
-  subproc
-
 
 macro rpcImpl*(p: untyped, publish: untyped): untyped =
   ## Define a remote procedure call.
@@ -302,6 +277,7 @@ macro rpcImpl*(p: untyped, publish: untyped): untyped =
   # Register rpc wrapper
   if pubthread:
     result.add quote do:
+      let subFunc: FastRpcProc = mkSubscriptionMethod(procName, `rpcMethod`)
       let subm: FastRpcProc = mkSubscriptionMethod(procName, `rpcMethod`)
       router.register(`path`, subm)
   elif syspragma:

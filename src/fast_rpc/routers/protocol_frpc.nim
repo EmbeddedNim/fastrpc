@@ -63,11 +63,21 @@ type
     msg*: string
     stacktrace*: seq[string]
 
+  # Context for servicing an RPC call 
+  RpcContext* = ref object
+    id*: FastRpcId
+    clientIdent*: int
+    router*: FastRpcRouter
+
   # Procedure signature accepted as an RPC call by server
-  FastRpcProc* = proc(params: FastRpcParamsBuffer, context: RpcContext): FastRpcParamsBuffer {.gcsafe, nimcall.}
+  FastRpcProc* = proc(params: FastRpcParamsBuffer,
+                      context: RpcContext
+                      ): FastRpcParamsBuffer {.gcsafe, nimcall.}
 
   FastRpcBindError* = object of ValueError
   FastRpcAddressUnresolvableError* = object of ValueError
+
+  BinString* = int64
 
   FastRpcRouter* = ref object
     procs*: Table[string, FastRpcProc]
@@ -76,26 +86,16 @@ type
     when compileOption("threads"):
       threads*: TableRef[BinString, Thread[FastRpcThreadArg]]
 
-  RpcContext* = ref object
-    id*: FastRpcId
-    sender*: SocketClientSender
-    router*: FastRpcRouter
-
-  BinString* = int
-
-  FastRpcThreadArg* = (FastRpcProc, FastRpcParamsBuffer, RpcContext)
-
 # proc `$`*(val: BinString): string {.borrow.}
 # proc `hash`*(x: BinString): Hash {.borrow.}
 # proc `==`*(x, y: BinString): bool {.borrow.}
 
 proc randBinString*(): BinString =
-  var idarr: array[sizeof(int), byte]
-  result =
-    if urandom(idarr):
-      BinString(cast[int](idarr))
-    else:
-      BinString(0)
+  var idarr: array[sizeof(BinString), byte]
+  if urandom(idarr):
+    result = cast[BinString](idarr)
+  else:
+    result = BinString(0)
 
 proc newFastRpcRouter*(): FastRpcRouter =
   new(result)

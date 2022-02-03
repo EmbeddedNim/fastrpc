@@ -3,16 +3,73 @@ import net
 import selectors
 import tables
 import posix
-
-# export net, selectors, tables, posix
+import sequtils
 
 import mcu_utils/logging
+import mcu_utils/msgbuffer
+import mcu_utils/logging
+
 import inet_types
 import socketserver/sockethelpers
+import routers/router_fastrpc
 
 export inet_types
 
-import sequtils
+
+type 
+  JsonRpcOpts* = ref object
+    router*: FastRpcRouter
+    bufferSize*: int
+    prefixMsgSize*: bool
+
+proc fastRpcExec*(rt: FastRpcRouter,
+                  ss: sink MsgBuffer,
+                  sender: SocketClientSender
+                  ): string =
+  logDebug("msgpack processing")
+  var rcall: FastRpcRequest
+  ss.unpack(rcall)
+  var res: FastRpcResponse = rt.route(rcall, sender)
+  var so = MsgBuffer.init(res.result.buf.data.len() + sizeof(res))
+  so.pack(res)
+  return so.data
+  
+proc readRpcData*[T](srv: SocketServerInfo[T],
+                        result: ReadyKey,
+                        sourceClient: Socket,
+                        sourceType: SockType,
+                        data: T) =
+  var
+    buffer = MsgBuffer.init(data.bufferSize)
+    host: IpAddress
+    port: Port
+
+  buffer.setPosition(0)
+  var sender: SocketClientSender
+
+  # Get network data
+  if sourceType == SockType.SOCK_STREAM:
+    discard sourceClient.recv(buffer.data, data.bufferSize)
+    if buffer.data == "":
+      raise newException(InetClientDisconnected, "")
+    let
+      msglen = buffer.readUintBe16().int
+    if buffer.data.len() != 2 + msglen:
+      raise newException(OSError, "invalid length: read: " &
+                          $buffer.data.len() & " expect: " & $(2 + msglen))
+    sender = senderClosure(sourceClient)
+  elif sourceType == SockType.SOCK_DGRAM:
+    discard sourceClient.recvFrom(buffer.data, buffer.data.len(), host, port)
+    sender = senderClosure(sourceClient, host, port)
+  else:
+    raise newException(ValueError, "unhandled socket type: " & $sourceType)
+
+  # process rpc
+  var response = fastRpcExec(data.router, move buffer, sender)
+
+  # logDebug("msg: data: ", repr(response))
+  discard sender(response)
+
 
 proc processWrites[T](selected: ReadyKey, srv: SocketServerInfo[T], data: T) = 
   logDebug("processWrites:", "selected:fd:", selected.fd)
@@ -50,7 +107,7 @@ proc processReads[T](selected: ReadyKey, srv: SocketServerInfo[T], data: T) =
 
     try:
       if srv.serverImpl.readHandler != nil:
-        srv.serverImpl.readHandler(srv, selected, sourceClient, sourceType, data)
+        readRpcData(srv, selected, sourceClient, sourceType, data)
 
     except InetClientDisconnected:
       var client: (Socket, SockType)
