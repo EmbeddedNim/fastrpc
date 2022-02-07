@@ -12,7 +12,15 @@ type
     bufferSize*: int
     prefixMsgSize*: bool
     input*: Chan[FastRpcParamsBuffer]
+    output*: Chan[FastRpcParamsBuffer]
 
+proc fastRpcEventHandler*(
+        srv: ServerInfo[FastRpcOpts],
+        key: ReadyKey,
+        sock: Socket,
+      ) =
+  logDebug("fastrpc:eventHandler:")
+  raise newException(Exception, "TODO")
 
 proc fastRpcReadHandler*(
         srv: ServerInfo[FastRpcOpts],
@@ -58,8 +66,8 @@ proc newFastRpcServer*(router: FastRpcRouter,
                        prefixMsgSize = false
                        ): Server[FastRpcOpts] =
   result.readHandler = fastRpcReadHandler
+  result.eventHandler = fastRpcEventHandler 
   result.writeHandler = nil 
-  result.eventHandler = nil 
   result.postProcessHandler = nil 
   result.opts = FastRpcOpts( 
     bufferSize: bufferSize,
