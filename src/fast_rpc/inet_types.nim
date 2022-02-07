@@ -46,7 +46,7 @@ type
     protocol*: net.Protocol
     socktype*: net.SockType
 
-  InetClientHandle* = ref InetClientObj
+  InetClientHandle* = ConstPtr[InetClientObj]
 
 type 
   InetClientDisconnected* = object of OSError
@@ -67,7 +67,7 @@ proc inetDomain*(inetaddr: InetAddress): nativesockets.Domain =
     result = Domain.AF_INET6 
 
 proc newClientHandle*(fd: SocketHandle, protocol = net.IPPROTO_TCP): InetClientHandle =
-  result = InetClientHandle(
+  result = newConstPtr InetClientObj(
     kind: clSocket,
     fd: fd,
     protocol: protocol,
@@ -75,7 +75,7 @@ proc newClientHandle*(fd: SocketHandle, protocol = net.IPPROTO_TCP): InetClientH
   )
 
 proc newClientHandle*(host: string, port: int, protocol = net.IPPROTO_UDP): InetClientHandle =
-  result = InetClientHandle(
+  result = newConstPtr InetClientObj(
     kind: clAddress,
     host: parseIpAddress(host),
     port: Port(port),
@@ -84,7 +84,7 @@ proc newClientHandle*(host: string, port: int, protocol = net.IPPROTO_UDP): Inet
   )
 
 proc newClientHandle*(msgid: CanMsgId, protocol = net.IPPROTO_RAW): InetClientHandle =
-  result = InetClientHandle(
+  result = newConstPtr InetClientObj(
     kind: clCanBus,
     msgid: msgid,
     protocol: protocol,

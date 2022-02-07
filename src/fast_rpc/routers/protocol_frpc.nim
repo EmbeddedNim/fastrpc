@@ -71,6 +71,7 @@ type
   RpcContext* = ref object
     id*: FastRpcId
     router*: FastRpcRouter
+    client*: InetClientHandle
 
   # Procedure signature accepted as an RPC call by server
   FastRpcProc* = proc(params: FastRpcParamsBuffer,

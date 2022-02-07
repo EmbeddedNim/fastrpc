@@ -59,57 +59,20 @@ proc clear*(router: var FastRpcRouter) =
 proc hasMethod*(router: FastRpcRouter, methodName: string): bool =
   router.procs.hasKey(methodName)
 
-proc emptySender(data: string): bool = false
-
-proc handleRoute*(
-            rpcProc: FastRpcProc,
-            router: FastRpcRouter,
-            stacktraces: bool,
-            req: FastRpcRequest,
-            sender: SocketClientSender = emptySender
-            ): FastRpcResponse {.gcsafe.} =
-
-      if rpcProc.isNil:
-        let msg = req.procName & " is not a registered RPC method."
-        let err = FastRpcError(code: METHOD_NOT_FOUND, msg: msg)
-        result = wrapResponseError(req.id, err)
-      else:
-        try:
-          # Handle rpc request the `context` variable is different
-          # based on whether the rpc request is a system/regular/subscription
-          var ctx = RpcContext(id: req.id, sender: sender, router: router)
-          let res: FastRpcParamsBuffer = rpcProc(req.params, ctx)
-          result = FastRpcResponse(kind: frResponse, id: req.id, result: res)
-        except ObjectConversionDefect as err:
-          result = wrapResponseError(
-                      req.id,
-                      INVALID_PARAMS,
-                      req.procName & " raised an exception",
-                      err, 
-                      stacktraces)
-        except CatchableError as err:
-          result = wrapResponseError(
-                      req.id,
-                      INTERNAL_ERROR,
-                      req.procName & " raised an exception",
-                      err, 
-                      stacktraces)
-
 proc route*(router: FastRpcRouter,
             req: FastRpcRequest,
-            sender: SocketClientSender = emptySender
+            client: InetClientHandle,
             ): FastRpcResponse {.gcsafe.} =
     ## Route's an rpc request. 
     # dumpAllocstats:
-    if req.kind == frRequest:
-      let rpcProc = router.procs.getOrDefault(req.procName)
-      result = rpcProc.handleRoute(router, router.stacktraces, req, sender)
-    elif req.kind == frSystemRequest:
-      let rpcProc = router.sysprocs.getOrDefault(req.procName)
-      result = rpcProc.handleRoute(router, router.stacktraces, req, sender)
-    elif req.kind == frSubscribe:
-      let rpcProc = router.procs.getOrDefault(req.procName)
-      result = rpcProc.handleRoute(router, router.stacktraces, req, sender)
+    var rpcProc: FastRpcProc 
+    case req.kind:
+    of frRequest:
+      rpcProc = router.procs.getOrDefault(req.procName)
+    of frSystemRequest:
+      rpcProc = router.sysprocs.getOrDefault(req.procName)
+    of frSubscribe:
+      rpcProc = router.procs.getOrDefault(req.procName)
     else:
       result = wrapResponseError(
                   req.id,
@@ -117,3 +80,29 @@ proc route*(router: FastRpcRouter,
                   "unimplemented request typed",
                   nil, 
                   router.stacktraces)
+
+    if rpcProc.isNil:
+      let msg = req.procName & " is not a registered RPC method."
+      let err = FastRpcError(code: METHOD_NOT_FOUND, msg: msg)
+      result = wrapResponseError(req.id, err)
+    else:
+      try:
+        # Handle rpc request the `context` variable is different
+        # based on whether the rpc request is a system/regular/subscription
+        var ctx = RpcContext(id: req.id, client: client, router: router)
+        let res: FastRpcParamsBuffer = rpcProc(req.params, ctx)
+        result = FastRpcResponse(kind: frResponse, id: req.id, result: res)
+      except ObjectConversionDefect as err:
+        result = wrapResponseError(
+                    req.id,
+                    INVALID_PARAMS,
+                    req.procName & " raised an exception",
+                    err, 
+                    router.stacktraces)
+      except CatchableError as err:
+        result = wrapResponseError(
+                    req.id,
+                    INTERNAL_ERROR,
+                    req.procName & " raised an exception",
+                    err, 
+                    router.stacktraces)
