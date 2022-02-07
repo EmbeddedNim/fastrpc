@@ -9,7 +9,7 @@ import ../inet_types
 type
   ServerInfo*[T] = ref object 
     ## Represents type for the select/epoll based socket server
-    serverImpl*: ServerImpl[T]
+    impl*: Server[T]
     selector*: Selector[T]
 
     listners*: Table[SocketHandle, Socket]
@@ -21,15 +21,14 @@ type
   ServerHandler*[T] = proc (srv: ServerInfo[T],
                             selected: ReadyKey,
                             sock: DataSock,
-                            info: T
                             ) {.nimcall.}
 
   ServerProcessor*[T] = proc (srv: ServerInfo[T],
                               results: seq[ReadyKey],
-                              info: T) {.nimcall.}
+                              ) {.nimcall.}
 
-  ServerImpl*[T] = object
-    data*: T
+  Server*[T] = object
+    info*: T
     readHandler*: ServerHandler[T]
     writeHandler*: ServerHandler[T]
     postProcessHandler*: ServerProcessor[T]
@@ -37,15 +36,18 @@ type
   SocketClientMessage* = ref object
     ss: MsgBuffer
 
+proc getInfo*[T](srv: ServerInfo[T]): T =
+  result = srv.impl.info
+
 proc createServerInfo*[T](
-          serverImpl: ServerImpl,
+          serverImpl: Server,
           selector: Selector[T],
           listners: seq[Socket],
           receivers: seq[(Socket, SockType)],
           producers: seq[(Socket, SockType)],
         ): ServerInfo[T] = 
   result = new(ServerInfo[T])
-  result.serverImpl = serverImpl
+  result.impl = serverImpl
   result.select = selector
   result.listners = initTable[SocketHandle, Socket]()
   result.receivers = initTable[SocketHandle, (Socket, SockType)]()

@@ -72,7 +72,7 @@ proc processReads[T](srv: ServerInfo[T], selected: ReadyKey, info: T) =
   raise newException(OSError, "unknown socket id: " & $selected.fd.int)
 
 proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
-                           serverImpl: ServerImpl[T]) =
+                           serverImpl: Server[T]) =
   # Initialize and setup a new socket server
   var select: Selector[T] = newSelector[T]()
   var listners = newSeq[Socket]()

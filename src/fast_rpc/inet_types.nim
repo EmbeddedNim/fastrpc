@@ -74,6 +74,15 @@ proc newClientHandle*(fd: SocketHandle, protocol = net.IPPROTO_TCP): InetClientH
     socktype: protocol.toSockType(),
   )
 
+proc newClientHandle*(host: IpAddress, port: Port, protocol = net.IPPROTO_UDP): InetClientHandle =
+  result = newConstPtr InetClientObj(
+    kind: clAddress,
+    host: host,
+    port: port,
+    protocol: protocol,
+    socktype: protocol.toSockType(),
+  )
+
 proc newClientHandle*(host: string, port: int, protocol = net.IPPROTO_UDP): InetClientHandle =
   result = newConstPtr InetClientObj(
     kind: clAddress,
