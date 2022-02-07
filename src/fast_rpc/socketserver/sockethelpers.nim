@@ -7,47 +7,56 @@ import mcu_utils/msgbuffer
 import ../inet_types
 
 type
-  SocketServerInfo*[T] = ref object 
+  ServerInfo*[T] = ref object 
     ## Represents type for the select/epoll based socket server
-    select*: Selector[T]
-    servers*: ref Table[SocketHandle, Socket]
-    clients*: ref Table[SocketHandle, (Socket, SockType)]
-    serverImpl*: SocketServerImpl[T]
+    serverImpl*: ServerImpl[T]
+    selector*: Selector[T]
 
-  SocketServerHandler*[T] = proc (srv: SocketServerInfo[T],
-                                  selected: ReadyKey,
-                                  client: Socket,
-                                  clientType: SockType,
-                                  data: T) {.nimcall.}
+    listners*: Table[SocketHandle, Socket]
+    receivers*: Table[SocketHandle, (Socket, SockType)]
+    producers*: Table[SocketHandle, (Socket, SockType)]
 
-  SocketServerProcessor*[T] = proc (srv: SocketServerInfo[T], results: seq[ReadyKey], data: T) {.nimcall.}
+  DataSock* = (Socket, SockType)
 
-  SocketServerImpl*[T] = ref object
+  ServerHandler*[T] = proc (srv: ServerInfo[T],
+                            selected: ReadyKey,
+                            sock: DataSock,
+                            info: T
+                            ) {.nimcall.}
+
+  ServerProcessor*[T] = proc (srv: ServerInfo[T],
+                              results: seq[ReadyKey],
+                              info: T) {.nimcall.}
+
+  ServerImpl*[T] = object
     data*: T
-    readHandler*: SocketServerHandler[T]
-    writeHandler*: SocketServerHandler[T]
-    postProcessHandler*: SocketServerProcessor[T]
+    readHandler*: ServerHandler[T]
+    writeHandler*: ServerHandler[T]
+    postProcessHandler*: ServerProcessor[T]
 
   SocketClientMessage* = ref object
     ss: MsgBuffer
 
-  SocketClientSender* = proc (data: string): bool {.closure, gcsafe.}
-
-proc createServerInfo*[T](selector: Selector[T],
-                          servers: seq[Socket],
-                          serverImpl: SocketServerImpl,
-                          clients: seq[(Socket, SockType)] = @[]
-                          ): SocketServerInfo[T] = 
-  result = new(SocketServerInfo[T])
-  result.select = selector
+proc createServerInfo*[T](
+          serverImpl: ServerImpl,
+          selector: Selector[T],
+          listners: seq[Socket],
+          receivers: seq[(Socket, SockType)],
+          producers: seq[(Socket, SockType)],
+        ): ServerInfo[T] = 
+  result = new(ServerInfo[T])
   result.serverImpl = serverImpl
-  result.servers = newTable[SocketHandle, Socket]()
-  result.clients = newTable[SocketHandle, (Socket, SockType)]()
+  result.select = selector
+  result.listners = initTable[SocketHandle, Socket]()
+  result.receivers = initTable[SocketHandle, (Socket, SockType)]()
+  result.producers = initTable[SocketHandle, (Socket, SockType)]()
 
-  for server in servers:
-    result.servers[server.getFd()] = server
-  for (client, ctype) in clients:
-    result.clients[client.getFd()] = (client, ctype)
+  # handle socket based listners (e.g. tcp)
+  for listner in listners:
+    result.listners[listner.getFd()] = listner
+  # handle any packet receiver's (e.g. udp, can)
+  for (receiver, ctype) in receivers:
+    result.receivers[receiver.getFd()] = (receiver, ctype)
 
 proc sendSafe*(socket: Socket, data: string) =
   # Checks for disconnect errors when sending

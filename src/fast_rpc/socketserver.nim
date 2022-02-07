@@ -15,14 +15,14 @@ export inet_types
 
 import sequtils
 
-proc processWrites[T](selected: ReadyKey, srv: SocketServerInfo[T], data: T) = 
+proc processWrites[T](srv: ServerInfo[T], selected: ReadyKey, info: T) = 
   logDebug("processWrites:", "selected:fd:", selected.fd)
   let (sourceClient, sourceType) = srv.clients[SocketHandle(selected.fd)]
   let data = getData(srv.select, selected.fd)
   if srv.serverImpl.writeHandler != nil:
     srv.serverImpl.writeHandler(srv, selected, sourceClient, sourceType, data)
 
-proc processReads[T](selected: ReadyKey, srv: SocketServerInfo[T], data: T) = 
+proc processReads[T](srv: ServerInfo[T], selected: ReadyKey, info: T) = 
   let handle = SocketHandle(selected.fd)
   logDebug("processReads:", "selected:fd:", selected.fd)
   logDebug("processReads:", "servers:fd:", srv.servers.keys().toSeq().mapIt(it.int()).repr())
@@ -36,7 +36,7 @@ proc processReads[T](selected: ReadyKey, srv: SocketServerInfo[T], data: T) =
       server.accept(client)
 
       client.getFd().setBlocking(false)
-      srv.select.registerHandle(client.getFd(), {Event.Read, Event.Write}, data)
+      srv.select.registerHandle(client.getFd(), {Event.Read, Event.Write}, info)
       srv.clients[client.getFd()] = (client, SOCK_STREAM)
 
       let id: int = client.getFd().int
@@ -51,7 +51,7 @@ proc processReads[T](selected: ReadyKey, srv: SocketServerInfo[T], data: T) =
 
     try:
       if srv.serverImpl.readHandler != nil:
-        srv.serverImpl.readHandler(srv, selected, sourceClient, sourceType, data)
+        srv.serverImpl.readHandler(srv, selected, sourceClient, sourceType, info)
 
     except InetClientDisconnected:
       var client: (Socket, SockType)
@@ -72,17 +72,17 @@ proc processReads[T](selected: ReadyKey, srv: SocketServerInfo[T], data: T) =
   raise newException(OSError, "unknown socket id: " & $selected.fd.int)
 
 proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
-                           serverImpl: SocketServerImpl[T]) =
+                           serverImpl: ServerImpl[T]) =
   # Initialize and setup a new socket server
   var select: Selector[T] = newSelector[T]()
-  var servers = newSeq[Socket]()
-  var dgramClients = newSeq[(Socket, SockType)]()
+  var listners = newSeq[Socket]()
+  var receivers = newSeq[(Socket, SockType)]()
 
   logInfo "SocketServer: starting"
   for ia in ipaddrs:
     logInfo "creating socket on:", "ip:", $ia.host, "port:", $ia.port, $ia.inetDomain(), "sockType:", $ia.socktype, $ia.protocol
 
-    var server = newSocket(
+    var socket = newSocket(
       domain=ia.inetDomain(),
       sockType=ia.socktype,
       protocol=ia.protocol,
@@ -90,24 +90,24 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
     )
     logDebug "socket started:", "fd:", server.getFd().int
 
-    server.setSockOpt(OptReuseAddr, true)
-    server.getFd().setBlocking(false)
-    server.bindAddr(ia.port)
+    socket.setSockOpt(OptReuseAddr, true)
+    socket .getFd().setBlocking(false)
+    socket.bindAddr(ia.port)
 
     var events: set[Event]
     if ia.protocol in {Protocol.IPPROTO_TCP}:
-      server.listen()
-      servers.add(server)
+      socket.listen()
+      listners.add(socket)
       events = {Event.Read}
     elif ia.protocol in {Protocol.IPPROTO_UDP}:
-      dgramClients.add((server,SOCK_DGRAM,))
+      receivers.add((socket,SOCK_DGRAM,))
       events = {Event.Read}
     else:
       raise newException(ValueError, "unhandled protocol: " & $ia.protocol)
 
-    select.registerHandle(server.getFd(), events, serverImpl.data)
+    select.registerHandle(socket.getFd(), events, serverImpl.data)
   
-  var srv = createServerInfo[T](select, servers, serverImpl, dgramClients)
+  var srv = createServerInfo[T](serverImpl, select, listners, receivers)
 
   while true:
     var results: seq[ReadyKey] = select.select(-1)
@@ -124,5 +124,5 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
 
   
   select.close()
-  for server in servers:
-    server.close()
+  for listner in srv.listers:
+    listner.close()
