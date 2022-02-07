@@ -1,11 +1,7 @@
 import std/monotimes, std/os
 
-import fast_rpc/socketserver
-import fast_rpc/routers/router_fastrpc
-import fast_rpc/socketserver/fast_rpc_impl
-
-const
-  VERSION = "1.0.0"
+import fast_rpc/server/server
+import fast_rpc/server/rpcmethods
 
 
 # Define RPC Server #
@@ -36,24 +32,24 @@ rpcRegisterMethodsProc(name=initRpcExampleRouter):
       os.sleep(400)
     result = "k bye"
 
-  proc microspub(count: int): int {.rpcPublisherThread().} =
-    # var subid = subs.subscribeWithThread(context, run_micros, % delay)
-    while true:
-      var ts = int(getMonoTime().ticks() div 1000)
-      discard rpcPublish(ts)
-      os.sleep(count)
+  # proc microspub(count: int): int {.rpcPublisherThread().} =
+  #   # var subid = subs.subscribeWithThread(context, run_micros, % delay)
+  #   while true:
+  #     var ts = int(getMonoTime().ticks() div 1000)
+  #     discard rpcPublish(ts)
+  #     os.sleep(count)
 
-  proc adcstream(count: int): seq[int] {.rpcPublisherThread().} =
-    # var subid = subs.subscribeWithThread(context, run_micros, % delay)
-    while true:
-      echo "adcstream ts'es"
-      var vals = newSeq[int]()
-      for i in 0..<20:
-        var ts = int(getMonoTime().ticks() div 1000)
-        vals.add ts
-      echo "adcstream publish"
-      discard rpcPublish(vals)
-      os.sleep(count)
+  # proc adcstream(count: int): seq[int] {.rpcPublisherThread().} =
+  #   # var subid = subs.subscribeWithThread(context, run_micros, % delay)
+  #   while true:
+  #     echo "adcstream ts'es"
+  #     var vals = newSeq[int]()
+  #     for i in 0..<20:
+  #       var ts = int(getMonoTime().ticks() div 1000)
+  #       vals.add ts
+  #     echo "adcstream publish"
+  #     discard rpcPublish(vals)
+  #     os.sleep(count)
 
   proc testerror(msg: string): string {.rpc.} =
     echo("test error: ", "what is your favorite color?")

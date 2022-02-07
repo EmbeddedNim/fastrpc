@@ -1,27 +1,26 @@
-import sets
-import json
+import router
+import ../socketserver
 
-import mcu_utils/logging
-import ../inet_types
-import ../socketserver/sockethelpers
-import ../routers/router_fastrpc
+import ../socketservers/sockethelpers
 
-export router_fastrpc
+export router, socketserver
+
 
 type 
   FastRpcOpts* = ref object
     router*: FastRpcRouter
     bufferSize*: int
     prefixMsgSize*: bool
+    input*: Chan[FastRpcParamsBuffer]
 
-proc fastRpcExec*(rt: FastRpcRouter,
-                  ss: sink MsgBuffer,
+proc fastRpcExec*(router: FastRpcRouter,
+                  ss: MsgBuffer,
                   clientId: InetClientHandle,
                   ): string =
   logDebug("msgpack processing")
   var rcall: FastRpcRequest
   ss.unpack(rcall)
-  var res: FastRpcResponse = rt.route(rcall, clientId)
+  var res: FastRpcResponse = router.call(rcall, clientId)
   var so = MsgBuffer.init(res.result.buf.data.len() + sizeof(res))
   so.pack(res)
   return so.data
@@ -58,12 +57,10 @@ proc fastRpcReader*(srv: ServerInfo[FastRpcOpts],
 
   # process rpc
   let router = srv.getInfo().router
-  var response = (router, move buffer, clientId)
+  var response = fastRpcExec(router, buffer, clientId)
 
   # logDebug("msg: data: ", repr(response))
-  # discard reply(response)
-
-
+  discard reply(response)
 
 proc newFastRpcServer*(router: FastRpcRouter,
                        bufferSize = 1400,

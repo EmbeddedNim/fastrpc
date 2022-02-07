@@ -8,35 +8,35 @@ import posix
 
 import mcu_utils/logging
 import inet_types
-import socketserver/sockethelpers
+import socketservers/sockethelpers
 
 export sockethelpers
 export inet_types
 
 import sequtils
 
-proc processWrites[T](srv: ServerInfo[T], selected: ReadyKey, info: T) = 
+proc processWrites[T](srv: ServerInfo[T], selected: ReadyKey) = 
   logDebug("processWrites:", "selected:fd:", selected.fd)
   let (sourceClient, sourceType) = srv.clients[SocketHandle(selected.fd)]
   let data = getData(srv.select, selected.fd)
   if srv.serverImpl.writeHandler != nil:
     srv.serverImpl.writeHandler(srv, selected, sourceClient, sourceType, data)
 
-proc processReads[T](srv: ServerInfo[T], selected: ReadyKey, info: T) = 
+proc processReads[T](srv: ServerInfo[T], selected: ReadyKey) = 
   let handle = SocketHandle(selected.fd)
   logDebug("processReads:", "selected:fd:", selected.fd)
   logDebug("processReads:", "servers:fd:", srv.servers.keys().toSeq().mapIt(it.int()).repr())
   logDebug("processReads:", "clients:fd:", srv.clients.keys().toSeq().mapIt(it.int()).repr())
 
-  if srv.servers.hasKey(handle):
-    let server = srv.servers[handle]
+  if srv.listners.hasKey(handle):
+    let server = srv.listners[handle]
     logDebug("process reads on:", "fd:", selected.fd, "srvfd:", server.getFd().int)
     if SocketHandle(selected.fd) == server.getFd():
       var client: Socket = new(Socket)
       server.accept(client)
 
       client.getFd().setBlocking(false)
-      srv.select.registerHandle(client.getFd(), {Event.Read, Event.Write}, info)
+      srv.select.registerHandle(client.getFd(), {Event.Read, Event.Write}, 0)
       srv.clients[client.getFd()] = (client, SOCK_STREAM)
 
       let id: int = client.getFd().int
@@ -46,12 +46,11 @@ proc processReads[T](srv: ServerInfo[T], selected: ReadyKey, info: T) =
   if srv.clients.hasKey(SocketHandle(selected.fd)):
     let (sourceClient, sourceType) = srv.clients[SocketHandle(selected.fd)]
     let sourceFd = selected.fd
-    let data = getData(srv.select, sourceFd)
     logDebug("srv client:", "fd:", selected.fd, "socktype:", sourceType)
 
     try:
       if srv.serverImpl.readHandler != nil:
-        srv.serverImpl.readHandler(srv, selected, sourceClient, sourceType, info)
+        srv.serverImpl.readHandler(srv, selected, sourceClient, sourceType, 0)
 
     except InetClientDisconnected:
       var client: (Socket, SockType)
@@ -74,7 +73,7 @@ proc processReads[T](srv: ServerInfo[T], selected: ReadyKey, info: T) =
 proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
                            serverImpl: Server[T]) =
   # Initialize and setup a new socket server
-  var select: Selector[T] = newSelector[T]()
+  var select: Selector[int] = newSelector[int]()
   var listners = newSeq[Socket]()
   var receivers = newSeq[(Socket, SockType)]()
 
@@ -105,7 +104,7 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
     else:
       raise newException(ValueError, "unhandled protocol: " & $ia.protocol)
 
-    select.registerHandle(socket.getFd(), events, serverImpl.data)
+    select.registerHandle(socket.getFd(), events, 0)
   
   var srv = createServerInfo[T](serverImpl, select, listners, receivers)
 

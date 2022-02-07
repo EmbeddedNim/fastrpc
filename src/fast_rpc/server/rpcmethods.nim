@@ -2,21 +2,12 @@ import tables, strutils, macros, os
 
 import mcu_utils/basictypes
 import mcu_utils/msgbuffer
-import mcu_utils/logging
 include mcu_utils/threads
 
-import msgpack4nim
-export msgpack4nim
-
-import msgpack4nim/msgpack2json
-
-export Millis
-
-import protocol_frpc
-export protocol_frpc
-
-import router_fastrpc
-export router_fastrpc
+import datatypes
+export datatypes
+import router
+export router
 
 proc makeProcName(s: string): string =
   result = ""
@@ -166,15 +157,15 @@ macro rpcImpl*(p: untyped, publish: untyped): untyped =
   # Register rpc wrapper
   if pubthread:
     result.add quote do:
-      let subFunc: FastRpcProc = mkSubscriptionMethod(procName, `rpcMethod`)
-      let subm: FastRpcProc = mkSubscriptionMethod(procName, `rpcMethod`)
-      router.register(`path`, subm)
+      # let subFunc: FastRpcProc = mkSubscriptionMethod(procName, `rpcMethod`)
+      # let subm: FastRpcProc = mkSubscriptionMethod(procName, `rpcMethod`)
+      register(router, `path`, `rpcMethod`)
   elif syspragma:
     result.add quote do:
-      router.sysRegister(`path`, `rpcMethod`)
+      sysRegister(router, `path`, `rpcMethod`)
   else:
     result.add quote do:
-      router.register(`path`, `rpcMethod`)
+      register(router, `path`, `rpcMethod`)
 
 template rpc*(p: untyped): untyped =
   rpcImpl(p, nil)
@@ -271,10 +262,10 @@ proc rpcReply*[T](context: RpcContext, value: T, kind: FastRpcType): bool =
   let res: FastRpcResponse = wrapResponse(context.id, packed, kind)
   var so = MsgBuffer.init(res.result.buf.data.len() + sizeof(res))
   so.pack(res)
-  return context.sender(so.data)
+  return context.send(so.data)
 
 template rpcReply*(value: untyped): untyped =
-  rpcReply(context, value, frPublish)
+  rpcReply(context, value, Publish)
 
 template rpcPublish*(arg: untyped): untyped =
-  rpcReply(context, arg, frPublish)
+  rpcReply(context, arg, Publish)

@@ -1,77 +1,35 @@
-import tables, macros, strutils
-import std/sysrand
-import std/hashes
 
+import std/tables, std/macros, std/sysrand
 import threading/channels
-
+export channels
 
 include mcu_utils/threads
-import mcu_utils/msgbuffer
-include mcu_utils/threads
+import mcu_utils/logging
 
-import ../inet_types
-import ../socketserver/sockethelpers
+import msgpack4nim
+import msgpack4nim/msgpack2json
 
-export tables
-export inet_types
-export sockethelpers
-export msgbuffer
+export logging, msgpack4nim, msgpack2json
 
-type
-  FastErrorCodes* = enum
-    # Error messages
-    FAST_PARSE_ERROR = -27
-    INVALID_REQUEST = -26
-    METHOD_NOT_FOUND = -25
-    INVALID_PARAMS = -24
-    INTERNAL_ERROR = -23
-    SERVER_ERROR = -22
+import protocol
+export protocol
 
 
 type
-  FastRpcType* {.size: sizeof(uint8).} = enum
-    # Fast RPC Types
-    frRequest       = 5
-    frResponse      = 6
-    frNotify        = 7
-    frError         = 8
-    frSubscribe     = 9
-    frPublish       = 10
-    frSubscribeStop = 11
-    frPublishDone   = 12
-    frSystemRequest = 19
-    frUnsupported   = 23
-    # rtpMax = 23 # numbers less than this store in single mpack/cbor byte
-
-  FastRpcParamsBuffer* = tuple[buf: MsgBuffer]
-  FastRpcId* = int
-
-  FastRpcRequest* = object
-    kind*: FastRpcType
-    id*: FastRpcId
-    procName*: string
-    params*: FastRpcParamsBuffer # - we handle params below
-
-  FastRpcResponse* = object
-    kind*: FastRpcType
-    id*: int
-    result*: FastRpcParamsBuffer # - we handle params below
-
-  FastRpcError* = ref object
-    code*: FastErrorCodes
-    msg*: string
-    trace*: seq[(string, string, int)]
-
   FastRpcErrorStackTrace* = object
     code*: int
     msg*: string
     stacktrace*: seq[string]
 
   # Context for servicing an RPC call 
+  RpcQueue* = ref object
+    event*: InetClientHandle # eventfds
+    queue*: Chan[FastRpcParamsBuffer]
+
   RpcContext* = ref object
-    id*: FastRpcId
-    router*: FastRpcRouter
-    client*: InetClientHandle
+    callId*: FastRpcId
+    clientId*: InetClientHandle
+    queue*: RpcQueue
 
   # Procedure signature accepted as an RPC call by server
   FastRpcProc* = proc(params: FastRpcParamsBuffer,
@@ -81,27 +39,27 @@ type
   FastRpcBindError* = object of ValueError
   FastRpcAddressUnresolvableError* = object of ValueError
 
-  SubId* = int64
-
-  RpcPublisher* = ref object
-    event*: SocketHandle # eventfds
-    queue*: Chan[FastRpcParamsBuffer]
+  RpcSubId* = int64
 
   FastRpcRouter* = ref object
     procs*: Table[string, FastRpcProc]
     sysprocs*: Table[string, FastRpcProc]
     stacktraces*: bool
+    inQueue*: RpcQueue
+    outQueue*: RpcQueue
 
 # proc `$`*(val: BinString): string {.borrow.}
 # proc `hash`*(x: BinString): Hash {.borrow.}
 # proc `==`*(x, y: BinString): bool {.borrow.}
+proc send(ctx: RpcQueue, data: FastRpcParamsBuffer) =
 
-proc randBinString*(): SubId =
-  var idarr: array[sizeof(SubId), byte]
+
+proc randBinString*(): RpcSubId =
+  var idarr: array[sizeof(RpcSubId), byte]
   if urandom(idarr):
-    result = cast[SubId](idarr)
+    result = cast[RpcSubId](idarr)
   else:
-    result = SubId(0)
+    result = RpcSubId(0)
 
 proc newFastRpcRouter*(): FastRpcRouter =
   new(result)
@@ -120,15 +78,6 @@ proc listSysMethods*(rt: FastRpcRouter): seq[string] =
   result = newSeqOfCap[string](rt.sysprocs.len())
   for name in rt.sysprocs.keys():
     result.add name
-
-# pack/unpack MsgBuffer
-proc pack_type*[ByteStream](s: ByteStream, x: FastRpcParamsBuffer) =
-  s.write(x.buf.data, x.buf.pos)
-
-proc unpack_type*[ByteStream](s: ByteStream, x: var FastRpcParamsBuffer) =
-  var params = s.readStrRemaining()
-  x.buf = MsgBuffer.init()
-  shallowCopy(x.buf.data, params)
 
 proc rpcPack*(res: FastRpcParamsBuffer): FastRpcParamsBuffer {.inline.} =
   result = res

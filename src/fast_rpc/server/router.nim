@@ -8,19 +8,17 @@ include mcu_utils/threads
 import msgpack4nim
 export msgpack4nim
 
-import msgpack4nim/msgpack2json
-
-import protocol_frpc
-export protocol_frpc
+import datatypes
+export datatypes
 export Millis
 
-proc wrapResponse*(id: FastRpcId, resp: FastRpcParamsBuffer, kind = frResponse): FastRpcResponse = 
+proc wrapResponse*(id: FastRpcId, resp: FastRpcParamsBuffer, kind = Response): FastRpcResponse = 
   result.kind = kind
   result.id = id
   result.result = resp
 
 proc wrapResponseError*(id: FastRpcId, err: FastRpcError): FastRpcResponse = 
-  result.kind = frError
+  result.kind = Error
   result.id = id
   var ss = MsgBuffer.init()
   ss.pack(err)
@@ -59,19 +57,20 @@ proc clear*(router: var FastRpcRouter) =
 proc hasMethod*(router: FastRpcRouter, methodName: string): bool =
   router.procs.hasKey(methodName)
 
-proc route*(router: FastRpcRouter,
-            req: FastRpcRequest,
-            client: InetClientHandle,
-            ): FastRpcResponse {.gcsafe.} =
+proc callMethod*(
+        router: FastRpcRouter,
+        req: FastRpcRequest,
+        clientId: InetClientHandle,
+      ): FastRpcResponse {.gcsafe.} =
     ## Route's an rpc request. 
     # dumpAllocstats:
     var rpcProc: FastRpcProc 
     case req.kind:
-    of frRequest:
+    of Request:
       rpcProc = router.procs.getOrDefault(req.procName)
-    of frSystemRequest:
+    of SystemRequest:
       rpcProc = router.sysprocs.getOrDefault(req.procName)
-    of frSubscribe:
+    of Subscribe:
       rpcProc = router.procs.getOrDefault(req.procName)
     else:
       result = wrapResponseError(
@@ -89,9 +88,11 @@ proc route*(router: FastRpcRouter,
       try:
         # Handle rpc request the `context` variable is different
         # based on whether the rpc request is a system/regular/subscription
-        var ctx = RpcContext(id: req.id, client: client, router: router)
-        let res: FastRpcParamsBuffer = rpcProc(req.params, ctx)
-        result = FastRpcResponse(kind: frResponse, id: req.id, result: res)
+        var ctx = RpcContext(callId: req.id, clientId: clientId)
+        let res: FastRpcParamsBuffer =
+          rpcProc(req.params, ctx)
+
+        result = FastRpcResponse(kind: Response, id: req.id, result: res)
       except ObjectConversionDefect as err:
         result = wrapResponseError(
                     req.id,
