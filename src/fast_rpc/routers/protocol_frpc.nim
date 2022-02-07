@@ -2,6 +2,9 @@ import tables, macros, strutils
 import std/sysrand
 import std/hashes
 
+import threading/channels
+
+
 include mcu_utils/threads
 import mcu_utils/msgbuffer
 include mcu_utils/threads
@@ -67,7 +70,6 @@ type
   # Context for servicing an RPC call 
   RpcContext* = ref object
     id*: FastRpcId
-    clientIdent*: int
     router*: FastRpcRouter
 
   # Procedure signature accepted as an RPC call by server
@@ -78,33 +80,33 @@ type
   FastRpcBindError* = object of ValueError
   FastRpcAddressUnresolvableError* = object of ValueError
 
-  BinString* = int64
+  SubId* = int64
+
+  RpcPublisher* = ref object
+    event*: SocketHandle # eventfds
+    queue*: Chan[FastRpcParamsBuffer]
 
   FastRpcRouter* = ref object
     procs*: Table[string, FastRpcProc]
     sysprocs*: Table[string, FastRpcProc]
     stacktraces*: bool
-    when compileOption("threads"):
-      threads*: TableRef[BinString, Thread[FastRpcThreadArg]]
 
 # proc `$`*(val: BinString): string {.borrow.}
 # proc `hash`*(x: BinString): Hash {.borrow.}
 # proc `==`*(x, y: BinString): bool {.borrow.}
 
-proc randBinString*(): BinString =
-  var idarr: array[sizeof(BinString), byte]
+proc randBinString*(): SubId =
+  var idarr: array[sizeof(SubId), byte]
   if urandom(idarr):
-    result = cast[BinString](idarr)
+    result = cast[SubId](idarr)
   else:
-    result = BinString(0)
+    result = SubId(0)
 
 proc newFastRpcRouter*(): FastRpcRouter =
   new(result)
   result.procs = initTable[string, FastRpcProc]()
   # result.sysprocs = initTable[string, FastRpcProc]()
   result.stacktraces = defined(debug)
-  when compileOption("threads"):
-    result.threads = newTable[BinString, Thread[FastRpcThreadArg]]()
 
 proc listMethods*(rt: FastRpcRouter): seq[string] =
   ## list the methods in the given router. 

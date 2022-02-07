@@ -5,9 +5,15 @@ export nativesockets, net, selectors, posix, tables
 
 import mcu_utils/logging
 import mcu_utils/msgbuffer
+import mcu_utils/eventfds
+
+export eventfds
 
 import json
 export json
+
+import threading/smartptrs
+export smartptrs
 
 type
   InetAddress* = object
@@ -17,6 +23,30 @@ type
     protocol*: net.Protocol
     socktype*: net.SockType
 
+  CanMsgId* = object
+    iface: int
+    msgid: int
+
+  InetClientType* = enum
+    clSocket,
+    clAddress,
+    clCanBus
+
+  InetClientObj* = object
+    # Combined type for a remote IP address and service port
+    case kind: InetClientType  # the `kind` field is the discriminator
+    of clSocket:
+      fd: SocketHandle
+    of clAddress:
+      host*: IpAddress
+      port*: Port
+    of clCanBus:
+      msgid: CanMsgId
+
+    protocol*: net.Protocol
+    socktype*: net.SockType
+
+  InetClientHandle* = ref InetClientObj
 
 type 
   InetClientDisconnected* = object of OSError
@@ -35,3 +65,28 @@ proc inetDomain*(inetaddr: InetAddress): nativesockets.Domain =
     result = Domain.AF_INET
   of IpAddressFamily.IPv6:
     result = Domain.AF_INET6 
+
+proc newClientHandle*(fd: SocketHandle, protocol = net.IPPROTO_TCP): InetClientHandle =
+  result = InetClientHandle(
+    kind: clSocket,
+    fd: fd,
+    protocol: protocol,
+    socktype: protocol.toSockType(),
+  )
+
+proc newClientHandle*(host: string, port: int, protocol = net.IPPROTO_UDP): InetClientHandle =
+  result = InetClientHandle(
+    kind: clAddress,
+    host: parseIpAddress(host),
+    port: Port(port),
+    protocol: protocol,
+    socktype: protocol.toSockType(),
+  )
+
+proc newClientHandle*(msgid: CanMsgId, protocol = net.IPPROTO_RAW): InetClientHandle =
+  result = InetClientHandle(
+    kind: clCanBus,
+    msgid: msgid,
+    protocol: protocol,
+    socktype: protocol.toSockType(),
+  )
