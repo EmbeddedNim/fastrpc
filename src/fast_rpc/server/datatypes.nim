@@ -1,7 +1,9 @@
 
 import std/tables, std/macros, std/sysrand
+import std/isolation
+import selectors
 import threading/channels
-export channels
+export selectors, channels
 
 include mcu_utils/threads
 import mcu_utils/logging
@@ -22,14 +24,17 @@ type
     stacktrace*: seq[string]
 
   # Context for servicing an RPC call 
-  RpcQueue* = ref object
-    event*: InetClientHandle # eventfds
-    queue*: Chan[FastRpcParamsBuffer]
-
-  RpcContext* = ref object
-    callId*: FastRpcId
+  RpcContext* = object
+    id*: FastrpcId
     clientId*: InetClientHandle
-    queue*: RpcQueue
+
+  RpcQueueItem* = ref object
+    cid*: InetClientHandle
+    data*: MsgBuffer
+
+  RpcQueue* = ref object
+    evt*: SelectEvent # eventfds
+    chan*: Chan[RpcQueueItem]
 
   # Procedure signature accepted as an RPC call by server
   FastRpcProc* = proc(params: FastRpcParamsBuffer,
@@ -48,10 +53,18 @@ type
     inQueue*: RpcQueue
     outQueue*: RpcQueue
 
-# proc `$`*(val: BinString): string {.borrow.}
-# proc `hash`*(x: BinString): Hash {.borrow.}
-# proc `==`*(x, y: BinString): bool {.borrow.}
-proc send(ctx: RpcQueue, data: FastRpcParamsBuffer) =
+proc send*(rq: RpcQueue, cid: InetClientHandle, data: sink MsgBuffer) =
+  rq.chan.send(
+    RpcQueueItem(
+      cid: cid,
+      data: nil
+    )
+  )
+  rq.evt.trigger()
+
+proc recv*(rq: RpcQueue): RpcQueueItem =
+  var msg: RpcQueueItem
+  rq.chan.recv(msg)
 
 
 proc randBinString*(): RpcSubId =
@@ -91,7 +104,7 @@ template rpcPack*(res: JsonNode): FastRpcParamsBuffer =
 proc rpcPack*[T](res: T): FastRpcParamsBuffer =
   var ss = MsgBuffer.init()
   ss.pack(res)
-  result = (buf: ss)
+  result = FastRpcParamsBuffer(buf: ss)
 
 proc rpcUnpack*[T](obj: var T, ss: FastRpcParamsBuffer, resetStream = true) =
   try:

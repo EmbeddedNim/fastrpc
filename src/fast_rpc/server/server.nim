@@ -13,25 +13,14 @@ type
     prefixMsgSize*: bool
     input*: Chan[FastRpcParamsBuffer]
 
-proc fastRpcExec*(router: FastRpcRouter,
-                  ss: MsgBuffer,
-                  clientId: InetClientHandle,
-                  ): string =
-  logDebug("msgpack processing")
-  var rcall: FastRpcRequest
-  ss.unpack(rcall)
-  var res: FastRpcResponse = router.call(rcall, clientId)
-  var so = MsgBuffer.init(res.result.buf.data.len() + sizeof(res))
-  so.pack(res)
-  return so.data
-  
 
-proc fastRpcReader*(srv: ServerInfo[FastRpcOpts],
-                    result: ReadyKey,
-                    sock: DataSock,
-                    ) =
+proc fastRpcReadHandler*(
+        srv: ServerInfo[FastRpcOpts],
+        key: ReadyKey,
+        sock: Socket,
+      ) =
   var
-    buffer = MsgBuffer.init(srv.getInfo().bufferSize)
+    buffer = MsgBuffer.init(srv.getOpts().bufferSize)
     host: IpAddress
     port: Port
 
@@ -39,8 +28,10 @@ proc fastRpcReader*(srv: ServerInfo[FastRpcOpts],
   var clientId: InetClientHandle
 
   # Get network data
-  if sock[1] == SockType.SOCK_STREAM:
-    discard sock[0].recv(buffer.data, srv.getInfo().bufferSize)
+  let stype: SockType = srv.selector.getData(sock.getFd())
+
+  if stype == SockType.SOCK_STREAM:
+    discard sock.recv(buffer.data, srv.getOpts().bufferSize)
     if buffer.data == "":
       raise newException(InetClientDisconnected, "")
     let
@@ -48,27 +39,29 @@ proc fastRpcReader*(srv: ServerInfo[FastRpcOpts],
     if buffer.data.len() != 2 + msglen:
       raise newException(OSError, "invalid length: read: " &
                           $buffer.data.len() & " expect: " & $(2 + msglen))
-    clientId = newClientHandle(sock[0].getFd())
-  elif sock[1] == SockType.SOCK_DGRAM:
-    discard sock[0].recvFrom(buffer.data, buffer.data.len(), host, port)
+    clientId = newClientHandle(sock.getFd())
+  elif stype == SockType.SOCK_DGRAM:
+    discard sock.recvFrom(buffer.data, buffer.data.len(), host, port)
     clientId  = newClientHandle(host, port)
   else:
-    raise newException(ValueError, "unhandled socket type: " & $sock[1])
+    raise newException(ValueError, "unhandled socket type: " & $stype)
 
   # process rpc
-  let router = srv.getInfo().router
-  var response = fastRpcExec(router, buffer, clientId)
+  let router = srv.getOpts().router
+  # var response = fastRpcExec(router, buffer, clientId)
 
   # logDebug("msg: data: ", repr(response))
-  discard reply(response)
+  router.inQueue.send(clientId, buffer)
 
 proc newFastRpcServer*(router: FastRpcRouter,
                        bufferSize = 1400,
                        prefixMsgSize = false
                        ): Server[FastRpcOpts] =
-  result.readHandler = fastRpcReader
+  result.readHandler = fastRpcReadHandler
   result.writeHandler = nil 
-  result.info = FastRpcOpts( 
+  result.eventHandler = nil 
+  result.postProcessHandler = nil 
+  result.opts = FastRpcOpts( 
     bufferSize: bufferSize,
     router: router,
     prefixMsgSize: prefixMsgSize

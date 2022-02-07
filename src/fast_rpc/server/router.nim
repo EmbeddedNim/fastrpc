@@ -22,7 +22,7 @@ proc wrapResponseError*(id: FastRpcId, err: FastRpcError): FastRpcResponse =
   result.id = id
   var ss = MsgBuffer.init()
   ss.pack(err)
-  result.result = (buf: ss)
+  result.result = FastRpcParamsBuffer(buf: ss)
 
 proc wrapResponseError*(id: FastRpcId, code: FastErrorCodes, msg: string, err: ref Exception, stacktraces: bool): FastRpcResponse = 
   let errobj = FastRpcError(code: SERVER_ERROR, msg: msg)
@@ -88,7 +88,8 @@ proc callMethod*(
       try:
         # Handle rpc request the `context` variable is different
         # based on whether the rpc request is a system/regular/subscription
-        var ctx = RpcContext(callId: req.id, clientId: clientId)
+        var ctx: RpcContext
+        # var ctx = RpcContext(callId: req.id, clientId: clientId)
         let res: FastRpcParamsBuffer =
           rpcProc(req.params, ctx)
 
@@ -107,3 +108,16 @@ proc callMethod*(
                     req.procName & " raised an exception",
                     err, 
                     router.stacktraces)
+
+proc callMethod*(router: FastRpcRouter,
+                 buffer: MsgBuffer,
+                 clientId: InetClientHandle,
+                 ): MsgBuffer =
+  logDebug("msgpack processing")
+  var req: FastRpcRequest
+  buffer.unpack(req)
+  var res: FastRpcResponse = router.callMethod(req, clientId)
+  var so = MsgBuffer.init(res.result.buf.data.len() + sizeof(res))
+  so.pack(res)
+  return so
+  

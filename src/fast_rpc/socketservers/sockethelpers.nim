@@ -10,17 +10,19 @@ type
   ServerInfo*[T] = ref object 
     ## Represents type for the select/epoll based socket server
     impl*: Server[T]
-    selector*: Selector[T]
+    selector*: Selector[SockType]
 
     listners*: Table[SocketHandle, Socket]
-    receivers*: Table[SocketHandle, (Socket, SockType)]
-    producers*: Table[SocketHandle, (Socket, SockType)]
+    receivers*: Table[SocketHandle, Socket]
+    events*: seq[SelectEvent]
 
-  DataSock* = (Socket, SockType)
+  ServerSock* = ref object
+    sock: Socket
+    typ: SockType
 
   ServerHandler*[T] = proc (srv: ServerInfo[T],
                             selected: ReadyKey,
-                            sock: DataSock,
+                            sock: Socket,
                             ) {.nimcall.}
 
   ServerProcessor*[T] = proc (srv: ServerInfo[T],
@@ -28,37 +30,40 @@ type
                               ) {.nimcall.}
 
   Server*[T] = object
-    info*: T
+    opts*: T
+    events*: seq[SelectEvent]
     readHandler*: ServerHandler[T]
+    eventHandler*: ServerHandler[T]
     writeHandler*: ServerHandler[T]
     postProcessHandler*: ServerProcessor[T]
 
   SocketClientMessage* = ref object
     ss: MsgBuffer
 
-proc getInfo*[T](srv: ServerInfo[T]): T =
-  result = srv.impl.info
+proc getOpts*[T](srv: ServerInfo[T]): T =
+  result = srv.impl.opts
 
-proc createServerInfo*[T](
-          serverImpl: Server,
-          selector: Selector[T],
+proc newServerInfo*[T](
+          serverImpl: Server[T],
+          selector: Selector[SockType],
           listners: seq[Socket],
-          receivers: seq[(Socket, SockType)],
-          producers: seq[(Socket, SockType)],
+          receivers: seq[Socket],
+          events: seq[SelectEvent],
         ): ServerInfo[T] = 
+  ## setup server info
   result = new(ServerInfo[T])
   result.impl = serverImpl
-  result.select = selector
+  result.selector = selector
   result.listners = initTable[SocketHandle, Socket]()
-  result.receivers = initTable[SocketHandle, (Socket, SockType)]()
-  result.producers = initTable[SocketHandle, (Socket, SockType)]()
+  result.receivers = initTable[SocketHandle, Socket]()
+  result.events = events
 
   # handle socket based listners (e.g. tcp)
   for listner in listners:
     result.listners[listner.getFd()] = listner
   # handle any packet receiver's (e.g. udp, can)
-  for (receiver, ctype) in receivers:
-    result.receivers[receiver.getFd()] = (receiver, ctype)
+  for receiver in receivers:
+    result.receivers[receiver.getFd()] = receiver
 
 proc sendSafe*(socket: Socket, data: string) =
   # Checks for disconnect errors when sending

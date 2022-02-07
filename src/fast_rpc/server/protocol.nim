@@ -13,8 +13,9 @@ type
     INTERNAL_ERROR = -23
     SERVER_ERROR = -22
 
-  FastRpcParamsBuffer* = tuple[buf: MsgBuffer] ##\
+  FastRpcParamsBuffer* = object
     ## implementation specific -- handles data buffer
+    buf*: MsgBuffer 
 
 
 type

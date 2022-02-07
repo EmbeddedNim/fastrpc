@@ -180,12 +180,12 @@ template rpcPublisherThread*(p: untyped): untyped =
     echo "RPC: PUBLISHER THREAD"
   rpcImpl(p, "thread")
 
-proc addStandardSyscalls*(router: var FastRpcRouter) =
+# proc addStandardSyscalls*(router: var FastRpcRouter) =
 
-  proc listall(): JsonNode {.rpc, system.} =
-    let names = context.router.listMethods()
-    let sysnames = context.router.listSysMethods()
-    result = %* {"methods": names, "system": sysnames}
+#   proc listall(): JsonNode {.rpc, system.} =
+#     let names = context.router.listMethods()
+#     let sysnames = context.router.listSysMethods()
+#     result = %* {"methods": names, "system": sysnames}
 
 template rpcRegisterMethodsProc*(name, blk: untyped): untyped =
   ## Template to generate a proc called `procName`. This proc
@@ -243,7 +243,7 @@ template rpcRegisterMethodsProc*(name, blk: untyped): untyped =
   proc `name`*(router {.inject.}: var FastRpcRouter  ) =
     ## Proc that registers all the methods in the `blk`
     blk
-    router.addStandardSysCalls()
+    # router.addStandardSysCalls()
 
   proc `name`*(): FastRpcRouter =
     ## convenience function to create a new router and init it
@@ -262,7 +262,7 @@ proc rpcReply*[T](context: RpcContext, value: T, kind: FastRpcType): bool =
   let res: FastRpcResponse = wrapResponse(context.id, packed, kind)
   var so = MsgBuffer.init(res.result.buf.data.len() + sizeof(res))
   so.pack(res)
-  return context.send(so.data)
+  # return context.send(so.data)
 
 template rpcReply*(value: untyped): untyped =
   rpcReply(context, value, Publish)
