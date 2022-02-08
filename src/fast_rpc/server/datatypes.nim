@@ -86,6 +86,7 @@ proc trySend*(rq: RpcQueue, cid: InetClientHandle, data: sink QMsgBuffer): bool 
     item
   )
   if res:
+    logDebug("datatypes:send:trigger: ", repr(rq.evt))
     rq.evt.trigger()
   return res
 

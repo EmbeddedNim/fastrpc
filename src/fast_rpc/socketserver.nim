@@ -16,22 +16,25 @@ export inet_types
 import sequtils
 
 proc processWrites[T](srv: ServerInfo[T], selected: ReadyKey) = 
-  logDebug("processWrites:", "selected:fd:", selected.fd)
+  logDebug("[SocketServer]::", "processWrites:", "selected:fd:", selected.fd)
   let sourceClient = srv.receivers[SocketHandle(selected.fd)]
   if srv.impl.writeHandler != nil:
     srv.impl.writeHandler(srv, selected, sourceClient)
 
 proc processEvents[T](srv: ServerInfo[T], selected: ReadyKey) = 
-  logDebug("processUserEvents:", "selected:fd:", selected.fd)
-  let sourceClient = srv.receivers[SocketHandle(selected.fd)]
-  if srv.impl.eventHandler != nil:
-    srv.impl.eventHandler(srv, selected, sourceClient)
+  logDebug("[SocketServer]::", "processUserEvents:", "selected:fd:", selected.fd)
+  # let sourceClient = srv.userEvents[SocketHandle(selected.fd)]
+  for evt, chan in srv.userEvents.pairs():
+    let val = selected in evt
+    logDebug("[SocketServer]::", "processUserEvents:", "userEvet:", val)
+  # if srv.impl.eventHandler != nil:
+    # srv.impl.eventHandler(srv, selected, sourceClient)
 
 proc processReads[T](srv: ServerInfo[T], selected: ReadyKey) = 
   let handle = SocketHandle(selected.fd)
-  logDebug("processReads:", "selected:fd:", selected.fd)
-  logDebug("processReads:", "servers:fd:", srv.listners.keys().toSeq().mapIt(it.int()).repr())
-  logDebug("processReads:", "clients:fd:", srv.receivers.keys().toSeq().mapIt(it.int()).repr())
+  logDebug("[SocketServer]::", "processReads:", "selected:fd:", selected.fd)
+  logDebug("[SocketServer]::", "processReads:", "listners:fd:", srv.listners.keys().toSeq().mapIt(it.int()).repr())
+  logDebug("[SocketServer]::", "processReads:", "receivers:fd:", srv.receivers.keys().toSeq().mapIt(it.int()).repr())
 
   if srv.listners.hasKey(handle):
     let server = srv.listners[handle]
@@ -83,9 +86,9 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
   var listners = newSeq[Socket]()
   var receivers = newSeq[Socket]()
 
-  logInfo "SocketServer: starting"
+  logInfo "[SocketServer]::", "starting"
   for ia in ipaddrs:
-    logInfo "creating socket on:", "ip:", $ia.host, "port:", $ia.port, $ia.inetDomain(), "sockType:", $ia.socktype, $ia.protocol
+    logInfo "[SocketServer]::", "creating socket on:", "ip:", $ia.host, "port:", $ia.port, $ia.inetDomain(), "sockType:", $ia.socktype, $ia.protocol
 
     var socket = newSocket(
       domain=ia.inetDomain(),
@@ -93,36 +96,41 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
       protocol=ia.protocol,
       buffered = false
     )
-    logDebug "socket started:", "fd:", socket.getFd().int
+    logDebug "[SocketServer]::", "socket started:", "fd:", socket.getFd().int
 
     socket.setSockOpt(OptReuseAddr, true)
     socket .getFd().setBlocking(false)
     socket.bindAddr(ia.port)
 
-    var events: set[Event]
+    var evts: set[Event]
     var stype: SockType
 
     if ia.protocol in {Protocol.IPPROTO_TCP}:
       socket.listen()
       listners.add(socket)
       stype = SOCK_STREAM
-      events = {Event.Read}
+      evts = {Event.Read}
     elif ia.protocol in {Protocol.IPPROTO_UDP}:
       receivers.add(socket)
       stype = SOCK_DGRAM
-      events = {Event.Read}
+      evts = {Event.Read}
     else:
       raise newException(ValueError, "unhandled protocol: " & $ia.protocol)
 
-    registerHandle(select, socket.getFd(), events, stype)
+    registerHandle(select, socket.getFd(), evts, stype)
   
-  var srv = newServerInfo[T](serverImpl, select, listners, receivers, serverImpl.events)
+  for queue in serverImpl.queues:
+    logDebug "[SocketServer]::", "userEvent:register:", repr(queue.evt)
+    registerEvent(select, queue.evt, SOCK_RAW)
+
+  var srv = newServerInfo[T](serverImpl, select, listners, receivers, serverImpl.queues)
 
   while true:
     var keys: seq[ReadyKey] = select.select(-1)
+    logDebug "[SocketServer]::keys:", repr(keys)
   
     for key in keys:
-      logDebug "event:", repr(key)
+      logDebug "[SocketServer]::key:", repr(key)
       if Event.Read in key.events:
           srv.processReads(key)
       if Event.User in key.events:

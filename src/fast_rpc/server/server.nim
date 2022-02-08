@@ -61,10 +61,11 @@ proc fastRpcReadHandler*(
 
   # logDebug("msg: data: ", repr(response))
   logDebug("readHandler:router: buffer: ", repr(buffer))
-  router.inQueue.send(clientId, buffer)
-  logDebug("readHandler:router: inQueue: ", repr(router.inQueue.chan.peek()))
+  let res = router.inQueue.trySend(clientId, buffer)
+  if not res:
+    logInfo("readHandler:router:send: dropped ")
+  logDebug("readHandler:router:inQueue: ", repr(router.inQueue.chan.peek()))
 
-import os
 
 proc fastRpcTask*(router: FastRpcRouter) {.thread.} =
   logInfo("Starting FastRpc Task")
@@ -81,6 +82,8 @@ proc fastRpcTask*(router: FastRpcRouter) {.thread.} =
     logInfo("fastrpcTask:sent:response: ", repr(response))
     let res = router.outQueue.trySend(item.cid, response)
     logInfo("fastrpcTask:sent:res: ", repr(res))
+    echo ""
+    echo ""
 
 
 proc newFastRpcServer*(router: FastRpcRouter,
@@ -99,5 +102,11 @@ proc newFastRpcServer*(router: FastRpcRouter,
   result.opts.router.inQueue = newRpcQueue(size=10)
   result.opts.router.outQueue = newRpcQueue(size=10)
   
+  result.queues = @[
+    # result.opts.router.inQueue.evt,
+    result.opts.router.outQueue,
+  ]
+  logDebug("newFastRpcServer:outQueue:evt: ", repr(router.outQueue.evt))
+  logDebug("newFastRpcServer:inQueue:evt: ", repr(router.inQueue.evt))
   logDebug("newFastRpcServer:inQueue:chan: ", repr(router.inQueue.chan.addr().pointer))
   createThread(result.opts.task, fastRpcTask, router)

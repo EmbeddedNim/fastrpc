@@ -4,9 +4,19 @@ import os
 
 import mcu_utils/logging
 import mcu_utils/msgbuffer
+
 import ../inet_types
+import ../server/datatypes
 
 type
+  Server*[T] = object
+    opts*: T
+    queues*: seq[RpcQueue]
+    readHandler*: ServerHandler[T]
+    eventHandler*: ServerHandler[T]
+    writeHandler*: ServerHandler[T]
+    postProcessHandler*: ServerProcessor[T]
+
   ServerInfo*[T] = ref object 
     ## Represents type for the select/epoll based socket server
     impl*: Server[T]
@@ -14,7 +24,7 @@ type
 
     listners*: Table[SocketHandle, Socket]
     receivers*: Table[SocketHandle, Socket]
-    events*: seq[SelectEvent]
+    userEvents*: Table[SelectEvent, Chan[RpcQueueItem]]
 
   ServerSock* = ref object
     sock: Socket
@@ -29,14 +39,6 @@ type
                               results: seq[ReadyKey],
                               ) {.nimcall.}
 
-  Server*[T] = object
-    opts*: T
-    events*: seq[SelectEvent]
-    readHandler*: ServerHandler[T]
-    eventHandler*: ServerHandler[T]
-    writeHandler*: ServerHandler[T]
-    postProcessHandler*: ServerProcessor[T]
-
   SocketClientMessage* = ref object
     ss: MsgBuffer
 
@@ -48,7 +50,7 @@ proc newServerInfo*[T](
           selector: Selector[SockType],
           listners: seq[Socket],
           receivers: seq[Socket],
-          events: seq[SelectEvent],
+          userEvents: seq[RpcQueue],
         ): ServerInfo[T] = 
   ## setup server info
   result = new(ServerInfo[T])
@@ -56,7 +58,7 @@ proc newServerInfo*[T](
   result.selector = selector
   result.listners = initTable[SocketHandle, Socket]()
   result.receivers = initTable[SocketHandle, Socket]()
-  result.events = events
+  result.userEvents = initTable[SelectEvent, Chan[RpcQueueItem]]()
 
   # handle socket based listners (e.g. tcp)
   for listner in listners:
@@ -64,6 +66,8 @@ proc newServerInfo*[T](
   # handle any packet receiver's (e.g. udp, can)
   for receiver in receivers:
     result.receivers[receiver.getFd()] = receiver
+  for queue in userEvents:
+    result.userEvents[queue.evt] = queue.chan 
 
 proc sendSafe*(socket: Socket, data: string) =
   # Checks for disconnect errors when sending
