@@ -94,6 +94,9 @@ proc recv*(rq: RpcQueue): RpcQueueItem =
   logDebug("datatypes:recv:")
   rq.chan.recv(result)
 
+proc tryRecv*(rq: RpcQueue, item: var RpcQueueItem): bool =
+  return rq.chan.tryRecv(item)
+
 
 proc randBinString*(): RpcSubId =
   var idarr: array[sizeof(RpcSubId), byte]

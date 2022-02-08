@@ -34,14 +34,14 @@ type
 
   InetClientObj* = object
     # Combined type for a remote IP address and service port
-    case kind: InetClientType  # the `kind` field is the discriminator
+    case kind*: InetClientType  # the `kind` field is the discriminator
     of clSocket:
-      fd: SocketHandle
+      fd*: SocketHandle
     of clAddress:
       host*: IpAddress
       port*: Port
     of clCanBus:
-      msgid: CanMsgId
+      msgid*: CanMsgId
 
     protocol*: net.Protocol
     socktype*: net.SockType

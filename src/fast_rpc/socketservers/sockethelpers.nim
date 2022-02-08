@@ -25,9 +25,9 @@ type
     ## Represents type for the select/epoll based socket server
     impl*: Server[T]
     selector*: Selector[FdKind]
-
     listners*: Table[SocketHandle, Socket]
     receivers*: Table[SocketHandle, Socket]
+    queues*: Table[SelectEvent, RpcQueue]
 
   FdKind* = object
     case isQueue*: bool
@@ -70,7 +70,7 @@ proc newServerInfo*[T](
           selector: Selector[FdKind],
           listners: seq[Socket],
           receivers: seq[Socket],
-          userEvents: seq[RpcQueue],
+          queues: seq[RpcQueue],
         ): ServerInfo[T] = 
   ## setup server info
   result = new(ServerInfo[T])
@@ -78,6 +78,7 @@ proc newServerInfo*[T](
   result.selector = selector
   result.listners = initTable[SocketHandle, Socket]()
   result.receivers = initTable[SocketHandle, Socket]()
+  result.queues = initTable[SelectEvent, RpcQueue]()
 
   # handle socket based listners (e.g. tcp)
   for listner in listners:
@@ -85,6 +86,8 @@ proc newServerInfo*[T](
   # handle any packet receiver's (e.g. udp, can)
   for receiver in receivers:
     result.receivers[receiver.getFd()] = receiver
+  for queue in queues:
+    result.queues[queue.evt] = queue 
 
 proc sendSafe*(socket: Socket, data: string) =
   # Checks for disconnect errors when sending

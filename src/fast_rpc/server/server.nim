@@ -20,8 +20,28 @@ proc fastRpcEventHandler*(
         key: ReadyKey,
         evt: SelectEvent,
       ) =
-  logDebug("fastrpc:eventHandler:")
-  raise newException(Exception, "TODO")
+  logDebug("fastRpcEventHandler:eventHandler:")
+
+  logDebug("fastRpcEventHandler:loop")
+  let queue = srv.queues[evt]
+  var item: RpcQueueItem
+  while queue.tryRecv(item):
+    logDebug("fastRpcEventHandler:item: ", repr(item))
+    case item.cid[].kind:
+    of clSocket:
+      var sock = srv.receivers[item.cid[].fd]
+      var msg: MsgBuffer = item.data[]
+      logDebug("fastRpcEventHandler:sock: ", repr(sock.getFd()))
+      var lenBuf = newString(2)
+      lenBuf.toStrBe16(msg.data.len().int16)
+      sock.sendSafe(lenBuf & msg.data)
+
+    of clAddress:
+      var sock = srv.receivers[item.cid[].fd]
+      logDebug("fastRpcEventHandler:sock: ", repr(sock.getFd()))
+    of clCanBus:
+      raise newException(Exception, "TODO: canbus sender")
+
 
 proc fastRpcReadHandler*(
         srv: ServerInfo[FastRpcOpts],
