@@ -112,12 +112,12 @@ proc callMethod*(
 proc callMethod*(router: FastRpcRouter,
                  buffer: MsgBuffer,
                  clientId: InetClientHandle,
-                 ): MsgBuffer =
+                 ): QMsgBuffer =
   logDebug("msgpack processing")
   var req: FastRpcRequest
   buffer.unpack(req)
   var res: FastRpcResponse = router.callMethod(req, clientId)
-  var so = MsgBuffer.init(res.result.buf.data.len() + sizeof(res))
-  so.pack(res)
+  var so = newUniquePtr(MsgBuffer.init(res.result.buf.data.len() + sizeof(res)))
+  so[].pack(res)
   return so
   

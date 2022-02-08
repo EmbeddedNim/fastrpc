@@ -1,7 +1,8 @@
 
 import std/tables, std/macros, std/sysrand
 import std/isolation
-import selectors
+import std/selectors
+
 import threading/channels
 export selectors, channels
 
@@ -15,6 +16,13 @@ export logging, msgpack4nim, msgpack2json
 
 import protocol
 export protocol
+
+type
+  # QMsgBuffer* = object
+  #   buffer: ptr UncheckedArray[byte]
+  #   pos*: int
+
+  QMsgBuffer* = UniquePtr[MsgBuffer]
 
 
 type
@@ -30,7 +38,7 @@ type
 
   RpcQueueItem* = ref object
     cid*: InetClientHandle
-    data*: MsgBuffer
+    data*: QMsgBuffer
 
   RpcQueue* = ref object
     evt*: SelectEvent # eventfds
@@ -53,16 +61,35 @@ type
     inQueue*: RpcQueue
     outQueue*: RpcQueue
 
-proc send*(rq: RpcQueue, cid: InetClientHandle, data: sink MsgBuffer) =
-  rq.chan.send(
-    RpcQueueItem(
-      cid: cid,
-      data: nil
-    )
-  )
+proc newRpcQueueItem*(cid: InetClientHandle, data: sink QMsgBuffer): RpcQueueItem =
+  new(result)
+  result.cid = cid
+  result.data = move data
+
+proc newRpcQueue*(size: int): RpcQueue =
+  new(result)
+  result.evt = newSelectEvent()
+  result.chan = newChan[RpcQueueItem](size)
+
+proc send*(rq: RpcQueue, cid: InetClientHandle, data: sink QMsgBuffer) =
+  logDebug("datatypes:send:")
+  var item = isolate RpcQueueItem( cid: cid, data: data)
+  rq.chan.send(item)
   rq.evt.trigger()
 
+proc trySend*(rq: RpcQueue, cid: InetClientHandle, data: sink QMsgBuffer): bool =
+  logDebug("datatypes:send:")
+  var item = isolate newRpcQueueItem(cid, data)
+  let res = channels.trySend(
+    rq.chan,
+    item
+  )
+  if res:
+    rq.evt.trigger()
+  return res
+
 proc recv*(rq: RpcQueue): RpcQueueItem =
+  logDebug("datatypes:recv:")
   var msg: RpcQueueItem
   rq.chan.recv(msg)
 
