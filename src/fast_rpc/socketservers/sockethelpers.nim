@@ -16,7 +16,6 @@ type
   Server*[T] = object
     opts*: T
     queues*: seq[RpcQueue]
-    userEvents*: Table[SelectEvent, Chan[RpcQueueItem]]
     readHandler*: ServerHandler[T]
     writeHandler*: ServerHandler[T]
     eventHandler*: EventHandler[T]
@@ -29,7 +28,6 @@ type
 
     listners*: Table[SocketHandle, Socket]
     receivers*: Table[SocketHandle, Socket]
-    userEvents*: Table[SelectEvent, Chan[RpcQueueItem]]
 
   FdKind* = object
     case isQueue*: bool
@@ -80,7 +78,7 @@ proc newServerInfo*[T](
   result.selector = selector
   result.listners = initTable[SocketHandle, Socket]()
   result.receivers = initTable[SocketHandle, Socket]()
-  result.userEvents = initTable[SelectEvent, Chan[RpcQueueItem]]()
+  # result.userEvents = initTable[SelectEvent, Chan[RpcQueueItem]]()
 
   # handle socket based listners (e.g. tcp)
   for listner in listners:
@@ -88,8 +86,8 @@ proc newServerInfo*[T](
   # handle any packet receiver's (e.g. udp, can)
   for receiver in receivers:
     result.receivers[receiver.getFd()] = receiver
-  for queue in userEvents:
-    result.userEvents[queue.evt] = queue.chan 
+  # for queue in userEvents:
+    # result.userEvents[queue.evt] = queue.chan 
 
 proc sendSafe*(socket: Socket, data: string) =
   # Checks for disconnect errors when sending
