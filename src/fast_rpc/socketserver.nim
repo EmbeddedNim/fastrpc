@@ -24,11 +24,11 @@ proc processWrites[T](srv: ServerInfo[T], selected: ReadyKey) =
 proc processEvents[T](srv: ServerInfo[T], selected: ReadyKey) = 
   logDebug("[SocketServer]::", "processUserEvents:", "selected:fd:", selected.fd)
   # let sourceClient = srv.userEvents[SocketHandle(selected.fd)]
-  for evt, chan in srv.userEvents.pairs():
-    let val = selected in evt
-    logDebug("[SocketServer]::", "processUserEvents:", "userEvet:", val)
-  # if srv.impl.eventHandler != nil:
-    # srv.impl.eventHandler(srv, selected, sourceClient)
+  let fdkind = srv.selector.getData(selected.fd)
+  let evt: SelectEvent = fdkind.getEvt().get()
+  logDebug("[SocketServer]::", "processUserEvents:", "userEvent:", repr evt)
+  if srv.impl.eventHandler != nil:
+    srv.impl.eventHandler(srv, selected, evt)
 
 proc processReads[T](srv: ServerInfo[T], selected: ReadyKey) = 
   let handle = SocketHandle(selected.fd)

@@ -16,9 +16,10 @@ type
   Server*[T] = object
     opts*: T
     queues*: seq[RpcQueue]
+    userEvents*: Table[SelectEvent, Chan[RpcQueueItem]]
     readHandler*: ServerHandler[T]
-    eventHandler*: ServerHandler[T]
     writeHandler*: ServerHandler[T]
+    eventHandler*: EventHandler[T]
     postProcessHandler*: ServerProcessor[T]
 
   ServerInfo*[T] = ref object 
@@ -40,6 +41,11 @@ type
   ServerHandler*[T] = proc (srv: ServerInfo[T],
                             selected: ReadyKey,
                             sock: Socket,
+                            ) {.nimcall.}
+
+  EventHandler*[T] = proc (srv: ServerInfo[T],
+                            selected: ReadyKey,
+                            evt: SelectEvent,
                             ) {.nimcall.}
 
   ServerProcessor*[T] = proc (srv: ServerInfo[T],

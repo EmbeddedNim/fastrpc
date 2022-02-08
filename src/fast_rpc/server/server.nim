@@ -18,7 +18,7 @@ type
 proc fastRpcEventHandler*(
         srv: ServerInfo[FastRpcOpts],
         key: ReadyKey,
-        sock: Socket,
+        evt: SelectEvent,
       ) =
   logDebug("fastrpc:eventHandler:")
   raise newException(Exception, "TODO")
