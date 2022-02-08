@@ -1,12 +1,16 @@
 import endians
 import sugar
 import os
+import net
+import options
 
 import mcu_utils/logging
 import mcu_utils/msgbuffer
 
 import ../inet_types
 import ../server/datatypes
+
+export options
 
 type
   Server*[T] = object
@@ -20,15 +24,18 @@ type
   ServerInfo*[T] = ref object 
     ## Represents type for the select/epoll based socket server
     impl*: Server[T]
-    selector*: Selector[SockType]
+    selector*: Selector[FdKind]
 
     listners*: Table[SocketHandle, Socket]
     receivers*: Table[SocketHandle, Socket]
     userEvents*: Table[SelectEvent, Chan[RpcQueueItem]]
 
-  ServerSock* = ref object
-    sock: Socket
-    typ: SockType
+  FdKind* = object
+    case isQueue*: bool
+    of true:
+      evt: SelectEvent
+    of false:
+      stype: SockType
 
   ServerHandler*[T] = proc (srv: ServerInfo[T],
                             selected: ReadyKey,
@@ -42,12 +49,21 @@ type
   SocketClientMessage* = ref object
     ss: MsgBuffer
 
+proc getEvt*(fdkind: FdKind): Option[SelectEvent] =
+  if fdkind.isQueue: result = some(fdkind.evt)
+proc getSockType*(fdkind: FdKind): Option[SockType] =
+  if not fdkind.isQueue: result = some(fdkind.stype)
+proc initFdKind*(stype: SockType): FdKind =
+  result = FdKind(isQueue: false, stype: stype)
+proc initFdKind*(evt: SelectEvent): FdKind =
+  result = FdKind(isQueue: true, evt: evt)
+
 proc getOpts*[T](srv: ServerInfo[T]): T =
   result = srv.impl.opts
 
 proc newServerInfo*[T](
           serverImpl: Server[T],
-          selector: Selector[SockType],
+          selector: Selector[FdKind],
           listners: seq[Socket],
           receivers: seq[Socket],
           userEvents: seq[RpcQueue],

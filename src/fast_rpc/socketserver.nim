@@ -49,7 +49,7 @@ proc processReads[T](srv: ServerInfo[T], selected: ReadyKey) =
       let id: int = client.getFd().int
       logDebug("client connected:", "fd:", id)
 
-      registerHandle(srv.selector, client.getFd(), {Event.Read}, SOCK_STREAM)
+      registerHandle(srv.selector, client.getFd(), {Event.Read}, initFdKind(SOCK_STREAM))
       return
 
   if srv.receivers.hasKey(SocketHandle(selected.fd)):
@@ -82,7 +82,7 @@ proc processReads[T](srv: ServerInfo[T], selected: ReadyKey) =
 proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
                            serverImpl: Server[T]) =
   # Initialize and setup a new socket server
-  var select: Selector[SockType] = newSelector[SockType]()
+  var select: Selector[FdKind] = newSelector[FdKind]()
   var listners = newSeq[Socket]()
   var receivers = newSeq[Socket]()
 
@@ -117,11 +117,11 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
     else:
       raise newException(ValueError, "unhandled protocol: " & $ia.protocol)
 
-    registerHandle(select, socket.getFd(), evts, stype)
+    registerHandle(select, socket.getFd(), evts, initFdKind(stype))
   
   for queue in serverImpl.queues:
     logDebug "[SocketServer]::", "userEvent:register:", repr(queue.evt)
-    registerEvent(select, queue.evt, SOCK_RAW)
+    registerEvent(select, queue.evt, initFdKind(queue.evt))
 
   var srv = newServerInfo[T](serverImpl, select, listners, receivers, serverImpl.queues)
 

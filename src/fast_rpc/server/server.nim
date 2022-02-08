@@ -37,7 +37,8 @@ proc fastRpcReadHandler*(
   var clientId: InetClientHandle
 
   # Get network data
-  let stype: SockType = srv.selector.getData(sock.getFd())
+  let fdkind = srv.selector.getData(sock.getFd())
+  let stype: SockType = fdkind.getSockType().get()
 
   if stype == SockType.SOCK_STREAM:
     discard sock.recv(buffer[].data, srv.getOpts().bufferSize)
