@@ -60,16 +60,21 @@ proc fastRpcReadHandler*(
   # var response = fastRpcExec(router, buffer, clientId)
 
   # logDebug("msg: data: ", repr(response))
+  logDebug("readHandler:router: buffer: ", repr(buffer))
   router.inQueue.send(clientId, buffer)
   logDebug("readHandler:router: inQueue: ", repr(router.inQueue.chan.peek()))
 
-proc fastRpcTask*(router: FastRpcRouter) =
+import os
+
+proc fastRpcTask*(router: FastRpcRouter) {.thread.} =
   logInfo("Starting FastRpc Task")
+  logDebug("fastrpcTask:inQueue:chan: ", repr(router.inQueue.chan.addr().pointer))
 
   var status = true
   while status:
     logInfo("fastrpcTask:loop")
     let item: RpcQueueItem = router.inQueue.recv()
+    logDebug("readHandler:router: inQueue: ", repr(router.inQueue.chan.peek()))
     logInfo("fastrpcTask:item: ", repr(item))
 
     var response = router.callMethod(item.data[], item.cid)
@@ -93,4 +98,6 @@ proc newFastRpcServer*(router: FastRpcRouter,
   )
   result.opts.router.inQueue = newRpcQueue(size=10)
   result.opts.router.outQueue = newRpcQueue(size=10)
-  # result.opts.task = createThread(router)
+  
+  logDebug("newFastRpcServer:inQueue:chan: ", repr(router.inQueue.chan.addr().pointer))
+  createThread(result.opts.task, fastRpcTask, router)

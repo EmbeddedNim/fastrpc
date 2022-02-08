@@ -74,6 +74,7 @@ proc newRpcQueue*(size: int): RpcQueue =
 proc send*(rq: RpcQueue, cid: InetClientHandle, data: sink QMsgBuffer) =
   logDebug("datatypes:send:")
   var item = isolate RpcQueueItem( cid: cid, data: data)
+  logDebug("datatypes:send:item: ", repr item)
   rq.chan.send(item)
   rq.evt.trigger()
 
@@ -90,8 +91,7 @@ proc trySend*(rq: RpcQueue, cid: InetClientHandle, data: sink QMsgBuffer): bool 
 
 proc recv*(rq: RpcQueue): RpcQueueItem =
   logDebug("datatypes:recv:")
-  var msg: RpcQueueItem
-  rq.chan.recv(msg)
+  rq.chan.recv(result)
 
 
 proc randBinString*(): RpcSubId =
