@@ -16,7 +16,7 @@ export inet_types
 import sequtils
 
 template withExecHandler(name, handlerProc, blk: untyped) =
-  ## handle any unexpected errors
+  ## check handlerProc isn't nil and handle any unexpected errors
   try:
     if handlerProc != nil:
       let `name` {.inject.} = handlerProc
