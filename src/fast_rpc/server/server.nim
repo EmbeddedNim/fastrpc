@@ -99,7 +99,7 @@ proc fastRpcTask*(router: FastRpcRouter) {.thread.} =
 
   var status = true
   while status:
-    logDebug("fastrpcTask:loop: ", $getThreadId())
+    logDebug("fastrpcTask:loop: ")
     let item: RpcQueueItem = router.inQueue.recv()
     let res = router.fastRpcExec(item)
     logDebug("fastrpcTask:sent:res: ", repr(res))
