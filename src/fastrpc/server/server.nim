@@ -108,7 +108,6 @@ proc fastRpcTask*(router: FastRpcRouter) {.thread.} =
 proc postServerProcessor(srv: ServerInfo[FastRpcOpts],
                          results: seq[ReadyKey],
                           ) =
-
   var item: RpcQueueItem 
   let router = srv.impl.opts.router
   while router.inQueue.tryRecv(item):
@@ -123,7 +122,7 @@ proc newFastRpcServer*(router: FastRpcRouter,
   result.readHandler = fastRpcReadHandler
   result.eventHandler = fastRpcEventHandler 
   result.writeHandler = nil 
-  result.opts = FastRpcOpts( 
+  result.opts = FastRpcOpts(
     bufferSize: bufferSize,
     router: router,
     prefixMsgSize: prefixMsgSize
