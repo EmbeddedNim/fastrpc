@@ -52,6 +52,7 @@ template withClientSocketErrorCleanups*(socktable: Table[SocketHandle, Socket], 
     logError("receiver socket rx/tx error: ", $(key.fd))
 
 
+## ============ Socket Server Core Functions ============ ##
 
 proc processEvents[T](srv: ServerInfo[T], selected: ReadyKey) = 
   logDebug("[SocketServer]::", "processUserEvents:", "selected:fd:", selected.fd)
@@ -100,7 +101,7 @@ proc processReads[T](srv: ServerInfo[T], selected: ReadyKey) =
 
 proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
                            serverImpl: Server[T]) =
-  # Initialize and setup a new socket server
+  # Setup and run a new SocketServer.
   var select: Selector[FdKind] = newSelector[FdKind]()
   var listners = newSeq[Socket]()
   var receivers = newSeq[Socket]()
