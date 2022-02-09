@@ -2,9 +2,9 @@ nimcache/
 nimblecache/
 htmldocs/
 nimcache*
-src/fast_rpc/tcpsocket
-src/fast_rpc/udpsocket
-src/fast_rpc/transit
+src/fastrpc/tcpsocket
+src/fastrpc/udpsocket
+src/fastrpc/transit
 udpclient
 udpserver
 rpc_udp_cli

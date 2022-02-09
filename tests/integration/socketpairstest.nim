@@ -3,7 +3,7 @@ import nativesockets, net
 
 import sugar
 
-import fast_rpc/socketserver/sockethelpers
+import fastrpc/socketserver/sockethelpers
 
 proc producerThread(args: (Socket, int, int)) =
   var

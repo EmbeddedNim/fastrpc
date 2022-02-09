@@ -2,7 +2,7 @@ import sets
 
 import mcu_utils/logging
 import ../inet_types
-import fast_rpc/socketserver/sockethelpers
+import fastrpc/socketserver/sockethelpers
 
 import hashes
 

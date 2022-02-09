@@ -7,7 +7,7 @@
 
 import unittest
 
-import fast_rpc
+import fastrpc
 
 test "correct welcome":
   echo "hellow world"

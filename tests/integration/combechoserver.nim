@@ -1,6 +1,6 @@
 
-import fast_rpc/socketserver
-import fast_rpc/socketserver/echo_comb_impl
+import fastrpc/socketserver
+import fastrpc/socketserver/echo_comb_impl
 
 # import nimprof
 

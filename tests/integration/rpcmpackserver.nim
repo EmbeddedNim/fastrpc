@@ -1,5 +1,5 @@
-import fast_rpc/socketserver
-import fast_rpc/socketserver/mpack_jrpc_impl
+import fastrpc/socketserver
+import fastrpc/socketserver/mpack_jrpc_impl
 
 import std/monotimes
 

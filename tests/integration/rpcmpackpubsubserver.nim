@@ -1,12 +1,12 @@
 import std/monotimes, std/os, std/json, std/tables
 
-import fast_rpc/socketserver
-import fast_rpc/socketserver/mpack_jrpc_impl
-import fast_rpc/routers/threaded_subscriptions
+import fastrpc/socketserver
+import fastrpc/socketserver/mpack_jrpc_impl
+import fastrpc/routers/threaded_subscriptions
 
 import mcu_utils/logging
 
-import fast_rpc/inet_types
+import fastrpc/inet_types
 import msgpack4nim/msgpack2json
 
 const

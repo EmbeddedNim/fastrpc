@@ -1,7 +1,7 @@
 import std/monotimes, std/os
 
-import fast_rpc/server/server
-import fast_rpc/server/rpcmethods
+import fastrpc/server/server
+import fastrpc/server/rpcmethods
 
 
 # Define RPC Server #
