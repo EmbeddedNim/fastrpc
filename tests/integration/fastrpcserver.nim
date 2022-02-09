@@ -32,6 +32,15 @@ rpcRegisterMethodsProc(name=initRpcExampleRouter):
       os.sleep(400)
     result = "k bye"
 
+  proc simulatelongcall(cntMillis: int): Millis {.rpc.} =
+
+    let t0 = getMonoTime().ticks div 1_000_000
+    echo("simulatelongcall: ", )
+    os.sleep(cntMillis)
+    let t1 = getMonoTime().ticks div 1_000_000
+
+    return Millis(t1-t0)
+
   # proc microspub(count: int): int {.rpcPublisherThread().} =
   #   # var subid = subs.subscribeWithThread(context, run_micros, % delay)
   #   while true:

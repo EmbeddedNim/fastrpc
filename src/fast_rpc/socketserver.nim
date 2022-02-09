@@ -15,69 +15,88 @@ export inet_types
 
 import sequtils
 
-proc processWrites[T](srv: ServerInfo[T], selected: ReadyKey) = 
-  logDebug("[SocketServer]::", "processWrites:", "selected:fd:", selected.fd)
-  let sourceClient = srv.receivers[SocketHandle(selected.fd)]
-  if srv.impl.writeHandler != nil:
-    srv.impl.writeHandler(srv, selected, sourceClient)
+template withExecHandler(name, handlerProc, blk: untyped) =
+  ## handle any unexpected errors
+  try:
+    if handlerProc != nil:
+      let `name` {.inject.} = handlerProc
+      `blk`
+  except Exception as err:
+    logInfo("[SocketServer]::", "unhandled error from server handler: ", repr `handlerProc`)
+    logException(err, "socketserver", lvlInfo)
+    srv.errorCount.inc()
+
+template withReceiverSocket*(name: untyped, fd: SocketHandle, modname: string, blk: untyped) =
+  ## handle checking receiver sockets
+  try:
+    let `name` {.inject.} = srv.receivers[fd]
+    `blk`
+  except KeyError:
+    logDebug("[SocketServer]::", modname, ":missing socket: ", repr(fd), "skipping")
+
+template withClientSocketErrorCleanups*(socktable: Table[SocketHandle, Socket], key: ReadyKey, blk: untyped) =
+  ## handle client socket errors / reading / writing / etc
+  try:
+    `blk`
+  except InetClientDisconnected:
+    var client: Socket
+    discard `socktable`.pop(key.fd.SocketHandle, client)
+    srv.selector.unregister(key.fd)
+    discard posix.close(key.fd.cint)
+    logError("receiver socket disconnected: fd: ", $key.fd)
+  except InetClientError:
+    `socktable`.del(key.fd.SocketHandle)
+    srv.selector.unregister(key.fd)
+
+    discard posix.close(key.fd.cint)
+    logError("receiver socket rx/tx error: ", $(key.fd))
+
+
 
 proc processEvents[T](srv: ServerInfo[T], selected: ReadyKey) = 
   logDebug("[SocketServer]::", "processUserEvents:", "selected:fd:", selected.fd)
-  # let sourceClient = srv.userEvents[SocketHandle(selected.fd)]
-  let fdkind = srv.selector.getData(selected.fd)
-  let evt: SelectEvent = fdkind.getEvt().get()
-  logDebug("[SocketServer]::", "processUserEvents:", "userEvent:", repr evt)
-  if srv.impl.eventHandler != nil:
-    srv.impl.eventHandler(srv, selected, evt)
+  withExecHandler(eventHandler, srv.impl.eventHandler):
+    let fdkind = srv.selector.getData(selected.fd)
+    let evt: SelectEvent = fdkind.getEvt().get()
+    let queue = srv.queues[evt]
+    logDebug("[SocketServer]::", "processUserEvents:", "userEvent:", repr evt)
+
+    withClientSocketErrorCleanups(srv.receivers, selected):
+      eventHandler(srv, queue)
+
+proc processWrites[T](srv: ServerInfo[T], selected: ReadyKey) = 
+  logDebug("[SocketServer]::", "processWrites:", "selected:fd:", selected.fd)
+  withExecHandler(writeHandler, srv.impl.writeHandler):
+    withReceiverSocket(sourceClient, selected.fd.SocketHandle, "processWrites"):
+      withClientSocketErrorCleanups(srv.receivers, selected):
+        writeHandler(srv, sourceClient)
 
 proc processReads[T](srv: ServerInfo[T], selected: ReadyKey) = 
-  let handle = SocketHandle(selected.fd)
+  logDebug("[SocketServer]::", "\n")
   logDebug("[SocketServer]::", "processReads:", "selected:fd:", selected.fd)
   logDebug("[SocketServer]::", "processReads:", "listners:fd:", srv.listners.keys().toSeq().mapIt(it.int()).repr())
   logDebug("[SocketServer]::", "processReads:", "receivers:fd:", srv.receivers.keys().toSeq().mapIt(it.int()).repr())
 
-  if srv.listners.hasKey(handle):
-    let server = srv.listners[handle]
-    logDebug("process reads on:", "fd:", selected.fd, "srvfd:", server.getFd().int)
+  if srv.listners.hasKey(selected.fd.SocketHandle):
+    let server = srv.listners[selected.fd.SocketHandle]
+    logDebug("process connect on listner:", "fd:", selected.fd,
+              "srvfd:", server.getFd().int)
     if SocketHandle(selected.fd) == server.getFd():
       var client: Socket = new(Socket)
       server.accept(client)
-
       client.getFd().setBlocking(false)
       srv.receivers[client.getFd()] = client
-
       let id: int = client.getFd().int
       logDebug("client connected:", "fd:", id)
-
       registerHandle(srv.selector, client.getFd(), {Event.Read}, initFdKind(SOCK_STREAM))
-      return
-
-  if srv.receivers.hasKey(SocketHandle(selected.fd)):
-    let sourceClient = srv.receivers[SocketHandle(selected.fd)]
-    let sourceFd = selected.fd
+  elif srv.receivers.hasKey(SocketHandle(selected.fd)):
     logDebug("srv client:", "fd:", selected.fd)
-
-    try:
-      if srv.impl.readHandler != nil:
-        srv.impl.readHandler(srv, selected, sourceClient)
-
-    except InetClientDisconnected:
-      var client: Socket
-      discard srv.receivers.pop(sourceFd.SocketHandle, client)
-      srv.selector.unregister(sourceFd)
-      discard posix.close(sourceFd.cint)
-      logError("client disconnected: fd: ", $sourceFd)
-
-    except InetClientError:
-      srv.receivers.del(sourceFd.SocketHandle)
-      srv.selector.unregister(sourceFd)
-
-      discard posix.close(sourceFd.cint)
-      logError("client read error: ", $(sourceFd))
-
-    return
-
-  raise newException(OSError, "unknown socket id: " & $selected.fd.int)
+    withExecHandler(readHandler, srv.impl.readHandler):
+      withReceiverSocket(sourceClient, selected.fd.SocketHandle, "processReads"):
+        withClientSocketErrorCleanups(srv.receivers, selected):
+          readHandler(srv, sourceClient) 
+  else:
+    raise newException(OSError, "unknown socket type: fd: " & repr selected)
 
 proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
                            serverImpl: Server[T]) =
@@ -127,10 +146,10 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
 
   while true:
     var keys: seq[ReadyKey] = select.select(-1)
-    logDebug "[SocketServer]::keys:", repr(keys)
+    logDebug "[SocketServer]::", "keys:", repr(keys)
   
     for key in keys:
-      logDebug "[SocketServer]::key:", repr(key)
+      logDebug "[SocketServer]::", "key:", repr(key)
       if Event.Read in key.events:
           srv.processReads(key)
       if Event.User in key.events:

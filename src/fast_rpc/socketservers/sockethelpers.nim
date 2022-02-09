@@ -28,6 +28,7 @@ type
     listners*: Table[SocketHandle, Socket]
     receivers*: Table[SocketHandle, Socket]
     queues*: Table[SelectEvent, RpcQueue]
+    errorCount*: uint64
 
   FdKind* = object
     case isQueue*: bool
@@ -37,13 +38,11 @@ type
       stype: SockType
 
   ServerHandler*[T] = proc (srv: ServerInfo[T],
-                            selected: ReadyKey,
                             sock: Socket,
                             ) {.nimcall.}
 
   EventHandler*[T] = proc (srv: ServerInfo[T],
-                            selected: ReadyKey,
-                            evt: SelectEvent,
+                            queue: RpcQueue,
                             ) {.nimcall.}
 
   ServerProcessor*[T] = proc (srv: ServerInfo[T],
