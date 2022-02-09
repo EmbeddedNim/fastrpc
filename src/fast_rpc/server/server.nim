@@ -113,7 +113,7 @@ proc postServerProcessor(srv: ServerInfo[FastRpcOpts],
   let router = srv.impl.opts.router
   while router.inQueue.tryRecv(item):
     let res = router.fastRpcExec(item)
-    logDebug("fastrpcTask:processed:sent:res: ", repr(res))
+    logDebug("fastrpcProcessor:processed:sent:res: ", repr(res))
 
 proc newFastRpcServer*(router: FastRpcRouter,
                        bufferSize = 1400,
@@ -139,8 +139,8 @@ proc newFastRpcServer*(router: FastRpcRouter,
   logDebug("newFastRpcServer:inQueue:evt: ", repr(router.inQueue.evt))
   logDebug("newFastRpcServer:inQueue:chan: ", repr(router.inQueue.chan.addr().pointer))
   if threaded:
-    # use current thread to handle rpcs
-    result.postProcessHandler = postServerProcessor 
-  else:
     # create n-threads
     createThread(result.opts.task, fastRpcTask, router)
+  else:
+    # use current thread to handle rpcs
+    result.postProcessHandler = postServerProcessor 
