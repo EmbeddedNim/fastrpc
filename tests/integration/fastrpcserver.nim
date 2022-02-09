@@ -77,5 +77,5 @@ when isMainModule:
   for rpc in router.procs.keys():
     echo "  rpc: ", rpc
 
-  var frpcServer = newFastRpcServer(router, prefixMsgSize=true, threaded=true)
+  var frpcServer = newFastRpcServer(router, prefixMsgSize=true, threaded=false)
   startSocketServer(inetAddrs, frpcServer)
