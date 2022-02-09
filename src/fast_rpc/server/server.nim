@@ -84,6 +84,14 @@ proc fastRpcReadHandler*(
     logInfo("readHandler:router:send: dropped ")
   logDebug("readHandler:router:inQueue: ", repr(router.inQueue.chan.peek()))
 
+proc fastRpcExec*(router: FastRpcRouter, item: RpcQueueItem): bool =
+  logDebug("readHandler:router: inQueue: ", repr(router.inQueue.chan.peek()))
+  logDebug("fastrpcTask:item: ", repr(item))
+
+  var response = router.callMethod(item.data[], item.cid)
+  logDebug("fastrpcTask:sent:response: ", repr(response))
+  result = router.outQueue.trySend(item.cid, response)
+
 
 proc fastRpcTask*(router: FastRpcRouter) {.thread.} =
   logInfo("Starting FastRpc Task")
@@ -91,25 +99,30 @@ proc fastRpcTask*(router: FastRpcRouter) {.thread.} =
 
   var status = true
   while status:
-    logDebug("fastrpcTask:loop")
+    logDebug("fastrpcTask:loop: ", $getThreadId())
     let item: RpcQueueItem = router.inQueue.recv()
-    logDebug("readHandler:router: inQueue: ", repr(router.inQueue.chan.peek()))
-    logDebug("fastrpcTask:item: ", repr(item))
-
-    var response = router.callMethod(item.data[], item.cid)
-    logDebug("fastrpcTask:sent:response: ", repr(response))
-    let res = router.outQueue.trySend(item.cid, response)
+    let res = router.fastRpcExec(item)
     logDebug("fastrpcTask:sent:res: ", repr(res))
 
 
+proc postServerProcessor(srv: ServerInfo[FastRpcOpts],
+                         results: seq[ReadyKey],
+                          ) =
+
+  var item: RpcQueueItem 
+  let router = srv.impl.opts.router
+  while router.inQueue.tryRecv(item):
+    let res = router.fastRpcExec(item)
+    logDebug("fastrpcTask:processed:sent:res: ", repr(res))
+
 proc newFastRpcServer*(router: FastRpcRouter,
                        bufferSize = 1400,
-                       prefixMsgSize = false
+                       prefixMsgSize = false,
+                       threaded = false,
                        ): Server[FastRpcOpts] =
   result.readHandler = fastRpcReadHandler
   result.eventHandler = fastRpcEventHandler 
   result.writeHandler = nil 
-  result.postProcessHandler = nil 
   result.opts = FastRpcOpts( 
     bufferSize: bufferSize,
     router: router,
@@ -125,4 +138,9 @@ proc newFastRpcServer*(router: FastRpcRouter,
   logDebug("newFastRpcServer:outQueue:evt: ", repr(router.outQueue.evt))
   logDebug("newFastRpcServer:inQueue:evt: ", repr(router.inQueue.evt))
   logDebug("newFastRpcServer:inQueue:chan: ", repr(router.inQueue.chan.addr().pointer))
-  createThread(result.opts.task, fastRpcTask, router)
+  if threaded:
+    # use current thread to handle rpcs
+    result.postProcessHandler = postServerProcessor 
+  else:
+    # create n-threads
+    createThread(result.opts.task, fastRpcTask, router)

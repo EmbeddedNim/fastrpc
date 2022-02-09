@@ -47,8 +47,9 @@ type
     port: Port
     prettyPrint: bool
     quiet: bool
-    dryRun: bool
+    noresults: bool
     noprint: bool
+    dryRun: bool
 
 var totalTime = 0'i64
 var totalCalls = 0'i64
@@ -202,6 +203,8 @@ proc call(ip: IpAddress,
           port=Port(5555),
           dry_run=false,
           quiet=false,
+          noresults=false,
+          noprint=false,
           pretty=false,
           count=1,
           delay=0,
@@ -214,6 +217,7 @@ proc call(ip: IpAddress,
                         ipAddr: ip,
                         port: port,
                         quiet: quiet,
+                        noresults: noresults,
                         dryRun: dry_run,
                         showstats: showstats,
                         prettyPrint: pretty,
