@@ -1,6 +1,6 @@
 
 import mcu_utils/logging
-import ../inettypes
+import mcu_utils/inettypes
 import ../servertypes
 
 type 

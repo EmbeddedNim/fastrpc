@@ -80,18 +80,19 @@ proc fastRpcReadHandler*(
 
   # logDebug("msg: data: ", repr(response))
   logDebug("readHandler:router: buffer: ", repr(buffer))
+
   let res = router.inQueue.trySendMsg(clientId, buffer)
   if not res:
     logInfo("readHandler:router:send: dropped ")
   logDebug("readHandler:router:inQueue: ", repr(router.inQueue.chan.peek()))
 
-proc fastRpcExec*(router: FastRpcRouter, item: RpcQueueItem): bool =
+proc fastRpcExec*(router: FastRpcRouter, item: InetMsgQueueItem): bool =
   logDebug("readHandler:router: inQueue: ", repr(router.inQueue.chan.peek()))
   logDebug("fastrpcTask:item: ", repr(item))
 
   var response = router.callMethod(item.data[], item.cid)
   logDebug("fastrpcTask:sent:response: ", repr(response))
-  result = router.outQueue.trySend(item.cid, response)
+  result = router.outQueue.trySendMsg(item.cid, response)
 
 
 proc fastRpcTask*(router: FastRpcRouter) {.thread.} =
@@ -101,7 +102,7 @@ proc fastRpcTask*(router: FastRpcRouter) {.thread.} =
   var status = true
   while status:
     logDebug("fastrpcTask:loop: ")
-    let item: RpcQueueItem = router.inQueue.recv()
+    let item: InetMsgQueueItem = router.inQueue.recv()
     let res = router.fastRpcExec(item)
     logDebug("fastrpcTask:sent:res: ", repr(res))
 
@@ -109,7 +110,7 @@ proc fastRpcTask*(router: FastRpcRouter) {.thread.} =
 proc postServerProcessor(srv: ServerInfo[FastRpcOpts],
                          results: seq[ReadyKey],
                           ) =
-  var item: RpcQueueItem 
+  var item: InetMsgQueueItem 
   let router = srv.impl.opts.router
   while router.inQueue.tryRecv(item):
     let res = router.fastRpcExec(item)
@@ -129,8 +130,8 @@ proc newFastRpcServer*(router: FastRpcRouter,
     router: router,
     prefixMsgSize: prefixMsgSize
   )
-  result.opts.router.inQueue = newRpcQueue(size=10)
-  result.opts.router.outQueue = newRpcQueue(size=10)
+  result.opts.router.inQueue = InetMsgQueue.init(size=10)
+  result.opts.router.outQueue = InetMsgQueue.init(size=10)
   
   result.queues = @[
     # result.opts.router.inQueue.evt,
