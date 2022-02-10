@@ -1,13 +1,6 @@
 import nativesockets, net, selectors, posix, tables
-import endians
 
 export nativesockets, net, selectors, posix, tables
-
-import mcu_utils/logging
-import mcu_utils/msgbuffer
-import mcu_utils/eventfds
-
-export eventfds
 
 import json
 export json
