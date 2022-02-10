@@ -5,7 +5,7 @@
 
 # import mcu_utils/logging
 
-# import fastrpc/inet_types
+# import fastrpc/inettypes
 # import msgpack4nim/msgpack2json
 
 # const

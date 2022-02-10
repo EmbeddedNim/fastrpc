@@ -15,7 +15,7 @@ import std/sysrand, std/random
 import mcu_utils/logging
 import mcu_utils/msgbuffer
 
-import inet_types
+import inettypes
 
 import json
 import msgpack4nim

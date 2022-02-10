@@ -7,11 +7,11 @@ import posix
 # export net, selectors, tables, posix
 
 import mcu_utils/logging
-import inet_types
+import inettypes
 import servertypes
 
 export servertypes
-export inet_types
+export inettypes
 
 import sequtils
 

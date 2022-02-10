@@ -5,7 +5,7 @@ import msgpack4nim/msgpack2json
 import mcu_utils/logging
 import mcu_utils/msgbuffer
 
-import ../inet_types
+import ../inettypes
 import ../socketservers/sockethelpers
 import ../extrarouters/router_json
 

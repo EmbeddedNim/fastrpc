@@ -1,7 +1,7 @@
 import sets
 
 import mcu_utils/logging
-import ../inet_types
+import ../inettypes
 import common_handlers_multi
 
 import hashes

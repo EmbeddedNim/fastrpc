@@ -3,7 +3,7 @@ import json
 import msgpack4nim/msgpack2json
 
 import mcu_utils/logging
-import ../inet_types
+import ../inettypes
 import ../socketserver/sockethelpers
 import ../routers/router_json
 

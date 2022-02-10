@@ -1,7 +1,7 @@
 import tables
 import mcu_utils/msgbuffer
-import ../inet_types
-export tables, inet_types, msgbuffer
+import ../inettypes
+export tables, inettypes, msgbuffer
 
 type
   FastErrorCodes* = enum

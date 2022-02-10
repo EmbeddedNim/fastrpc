@@ -5,7 +5,7 @@ import mcu_utils/msgbuffer
 
 export msgbuffer 
 
-import ../inet_types
+import ../inettypes
 import sockethelpers
 
 proc senderClosure*(sourceClient: Socket): SocketClientSender =
