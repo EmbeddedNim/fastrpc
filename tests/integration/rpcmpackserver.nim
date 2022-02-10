@@ -1,5 +1,7 @@
 import fastrpc/socketserver
-import fastrpc/socketserver/mpack_jrpc_impl
+import fastrpc/socketservers/mpack_jrpc_impl
+import fastrpc/extrarouters/router_json
+
 
 import std/monotimes
 

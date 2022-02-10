@@ -6,8 +6,8 @@ import mcu_utils/logging
 import mcu_utils/msgbuffer
 
 import ../inet_types
-import ../socketserver/sockethelpers
-import ../routers/router_json
+import ../socketservers/sockethelpers
+import ../extrarouters/router_json
 
 import common_handlers
 
@@ -21,11 +21,10 @@ type
 
 proc mpackJrpcExec*(rt: RpcRouter,
                     ss: sink MsgBuffer,
-                    sender: SocketClientSender
                     ): string =
   logDebug("msgpack processing")
   var rcall = msgpack2json.toJsonNode(ss.data)
-  var res: JsonNode = rt.route(rcall, sender)
+  var res: JsonNode = rt.route(rcall)
   result = res.fromJsonNode()
 
 customPacketRpcHandler(packetMpackJRpcHandler, mpackJrpcExec)

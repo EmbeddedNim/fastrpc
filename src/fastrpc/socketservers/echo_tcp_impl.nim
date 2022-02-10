@@ -1,18 +1,16 @@
 
 import mcu_utils/logging
 import ../inet_types
-import ../socketserver/sockethelpers
+import ../servertypes
 
 type 
   EchoOpts = ref object
     prompt: string
     selfEchoDisable: bool
 
-proc echoTcpReadHandler*(srv: SocketServerInfo[EchoOpts],
-                         result: ReadyKey,
+proc echoTcpReadHandler*(srv: ServerInfo[EchoOpts],
                          sourceClient: Socket,
-                         sourceType: SockType,
-                         data: EchoOpts) =
+                         ) =
 
   var message = sourceClient.recvLine()
 
@@ -21,16 +19,16 @@ proc echoTcpReadHandler*(srv: SocketServerInfo[EchoOpts],
   else:
     logDebug("received from client: %s", message)
 
-    for cfd, client in srv.clients:
-      if data.selfEchoDisable and cfd == sourceClient.getFd():
+    for cfd, client in srv.receivers:
+      if srv.impl.opts.selfEchoDisable and cfd == sourceClient.getFd():
         continue
-      client[0].send(data.prompt & message & "\r\L")
+      client.send(srv.impl.opts.prompt & message & "\r\L")
 
-proc newEchoTcpServer*(prefix = "", selfEchoDisable = false): SocketServerImpl[EchoOpts] =
+proc newEchoTcpServer*(prefix = "", selfEchoDisable = false): Server[EchoOpts] =
   new(result)
   result.readHandler = echoTcpReadHandler
   result.writeHandler = nil 
   result.postProcessHandler = nil 
-  result.data = new(EchoOpts) 
-  result.data.prompt = prefix
-  result.data.selfEchoDisable = selfEchoDisable 
+  result.opts = new(EchoOpts) 
+  result.opts.prompt = prefix
+  result.opts.selfEchoDisable = selfEchoDisable 

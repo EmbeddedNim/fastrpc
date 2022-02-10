@@ -2,7 +2,7 @@ import sets
 
 import mcu_utils/logging
 import ../inet_types
-import fastrpc/socketserver/sockethelpers
+import ../servertypes
 
 import hashes
 
@@ -15,34 +15,35 @@ type
 
 proc hash*(sock: Socket): Hash = hash(sock.getFd())
 
-proc sendAllClients*(srv: SocketServerInfo[EchoOpts],
-                     data: EchoOpts,
+proc sendAllClients*(srv: ServerInfo[EchoOpts],
                      sourceClient: Socket,
-                     sourceType: SockType,
-                     message: string) =
+                     message: string,
+                     ) =
 
-  var msg = data.prompt & message & "\r\n"
+  var msg = srv.impl.opts.prompt & message & "\r\n"
 
   # tcp clients
-  for cfd, client in srv.clients:
-    if client[1] == SockType.SOCK_STREAM:
-      client[0].send(msg)
+  let fdkind = srv.selector.getData(sourceClient.getFd())
+  let stype: SockType = fdkind.getSockType().get()
 
-  logDebug("sendAllClients:", $data.knownClients)
+  for cfd, client in srv.receivers:
+    if stype == SockType.SOCK_STREAM:
+      client.send(msg)
+
+  logDebug("sendAllClients:", $srv.impl.opts.knownClients)
   # udp clients
-  for (ia, client) in data.knownClients:
+  for (ia, client) in srv.impl.opts.knownClients:
     client.sendTo(ia.host, ia.port, msg)
 
-proc echoReadHandler*(srv: SocketServerInfo[EchoOpts],
-                         result: ReadyKey,
-                         sourceClient: Socket,
-                         sourceType: SockType,
-                         data: EchoOpts) =
-  logDebug("echoReadHandler:", "sourceClient:", sourceClient.getFd().int, "socktype:", sourceType)
+proc echoReadHandler*(srv: ServerInfo[EchoOpts],
+                      sourceClient: Socket,
+                      ) =
+  let stype = srv.getSockType(sourceClient)
+  logDebug("echoReadHandler:", "sourceClient:", sourceClient.getFd().int, "socktype:", stype)
   var
     message = newString(EchoBufferSize)
 
-  case sourceType:
+  case stype:
   of SockType.SOCK_STREAM:
     discard sourceClient.recv(message, EchoBufferSize)
 
@@ -52,24 +53,24 @@ proc echoReadHandler*(srv: SocketServerInfo[EchoOpts],
       port: Port
 
     discard sourceClient.recvFrom(message, message.len(), address, port)
-    data.knownClients.incl((InetAddress(host: address, port: port), sourceClient))
+    srv.impl.opts.knownClients.incl((InetAddress(host: address, port: port), sourceClient))
 
   else:
-    raise newException(ValueError, "unhandled socket type: " & $sourceType)
+    raise newException(ValueError, "unhandled socket type: " & $stype)
 
   if message == "":
     raise newException(InetClientDisconnected, "")
   else:
     logDebug("received from client:", message)
 
-    srv.sendAllClients(data, sourceClient, sourceType, message)
+    srv.sendAllClients(sourceClient, message)
 
-  
-proc newEchoServer*(prefix = "", selfEchoDisable = false): SocketServerImpl[EchoOpts] =
+
+proc newEchoServer*(prefix = "", selfEchoDisable = false): Server[EchoOpts] =
   new(result)
   result.readHandler = echoReadHandler
   result.writeHandler = nil 
-  result.data = new(EchoOpts) 
-  result.data.knownClients = initHashSet[(InetAddress, Socket)]()
-  result.data.prompt = prefix
-  result.data.bufferSize = 1400
+  result.opts = new(EchoOpts) 
+  result.opts.knownClients = initHashSet[(InetAddress, Socket)]()
+  result.opts.prompt = prefix
+  result.opts.bufferSize = 1400

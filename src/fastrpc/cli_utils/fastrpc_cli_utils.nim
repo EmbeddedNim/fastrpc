@@ -1,7 +1,6 @@
 import json, tables, strutils, macros, options
 import strformat
 import net, os
-import streams
 import times
 import stats
 import sequtils
@@ -16,8 +15,8 @@ from cligen/argcvt import ArgcvtParams, argKeys         # Little helpers
 import msgpack4nim
 import msgpack4nim/msgpack2json
 
-import fastrpc/server/protocol
-import fastrpc/socketservers/sockethelpers
+import ../server/protocol
+import ../servertypes
 
 enableTrueColors()
 proc print*(text: varargs[string]) =

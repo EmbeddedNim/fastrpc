@@ -8,9 +8,9 @@ import posix
 
 import mcu_utils/logging
 import inet_types
-import socketservers/sockethelpers
+import servertypes
 
-export sockethelpers
+export servertypes
 export inet_types
 
 import sequtils
@@ -57,8 +57,7 @@ template withClientSocketErrorCleanups*(socktable: Table[SocketHandle, Socket], 
 proc processEvents[T](srv: ServerInfo[T], selected: ReadyKey) = 
   logDebug("[SocketServer]::", "processUserEvents:", "selected:fd:", selected.fd)
   withExecHandler(eventHandler, srv.impl.eventHandler):
-    let fdkind = srv.selector.getData(selected.fd)
-    let evt: SelectEvent = fdkind.getEvt().get()
+    let evt = srv.getEvent(selected.fd)
     let queue = srv.queues[evt]
     logDebug("[SocketServer]::", "processUserEvents:", "userEvent:", repr evt)
 

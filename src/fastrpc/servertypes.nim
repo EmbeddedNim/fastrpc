@@ -7,13 +7,13 @@ import options
 import mcu_utils/logging
 import mcu_utils/msgbuffer
 
-import ../inet_types
-import ../server/datatypes
+import inet_types
+import server/datatypes
 
 export options
 
 type
-  Server*[T] = object
+  Server*[T] = ref object
     opts*: T
     queues*: seq[RpcQueue]
     readHandler*: ServerHandler[T]
@@ -52,14 +52,36 @@ type
   SocketClientMessage* = ref object
     ss: MsgBuffer
 
-proc getEvt*(fdkind: FdKind): Option[SelectEvent] =
+proc getEvtOpt*(fdkind: FdKind): Option[SelectEvent] =
   if fdkind.isQueue: result = some(fdkind.evt)
-proc getSockType*(fdkind: FdKind): Option[SockType] =
+proc getSockTypeOpt*(fdkind: FdKind): Option[SockType] =
   if not fdkind.isQueue: result = some(fdkind.stype)
+
 proc initFdKind*(stype: SockType): FdKind =
   result = FdKind(isQueue: false, stype: stype)
 proc initFdKind*(evt: SelectEvent): FdKind =
   result = FdKind(isQueue: true, evt: evt)
+
+proc getEvent*[T](srv: ServerInfo[T], sock: SocketHandle | int): SelectEvent =
+  let fdkind = srv.selector.getData(sock)
+  if fdkind.isQueue:
+    return fdkind.evt
+  else:
+    raise newException(KeyError, "no SelectEvent data")
+proc getEvent*[T](srv: ServerInfo[T], sock: Socket): SelectEvent =
+  getEvent(srv, sock.getFd())
+
+proc getSockType*[T](srv: ServerInfo[T], sock: SocketHandle | int): SockType =
+  let fdkind = srv.selector.getData(sock)
+  if not fdkind.isQueue:
+    return fdkind.stype
+  else:
+    raise newException(KeyError, "no SelectEvent data")
+proc getSockType*[T](srv: ServerInfo[T], sock: Socket): SockType =
+  getSockType(srv, sock.getFd())
+
+proc getSockType*(fdkind: FdKind): Option[SockType] =
+  if not fdkind.isQueue: result = some(fdkind.stype)
 
 proc getOpts*[T](srv: ServerInfo[T]): T =
   result = srv.impl.opts

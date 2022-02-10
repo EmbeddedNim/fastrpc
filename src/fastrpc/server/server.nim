@@ -1,9 +1,8 @@
 import router
+import ../servertypes
 import ../socketserver
 
-import ../socketservers/sockethelpers
-
-export router, socketserver
+export router, servertypes, socketserver
 
 
 type 
@@ -119,6 +118,7 @@ proc newFastRpcServer*(router: FastRpcRouter,
                        prefixMsgSize = false,
                        threaded = false,
                        ): Server[FastRpcOpts] =
+  new(result)
   result.readHandler = fastRpcReadHandler
   result.eventHandler = fastRpcEventHandler 
   result.writeHandler = nil 
