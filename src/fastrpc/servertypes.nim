@@ -6,8 +6,8 @@ import options
 
 import mcu_utils/logging
 import mcu_utils/msgbuffer
+import mcu_utils/inettypes
 
-import inettypes
 import server/datatypes
 
 export options
@@ -15,7 +15,7 @@ export options
 type
   Server*[T] = ref object
     opts*: T
-    queues*: seq[RpcQueue]
+    queues*: seq[InetMsgQueue]
     readHandler*: ServerHandler[T]
     writeHandler*: ServerHandler[T]
     eventHandler*: EventHandler[T]
@@ -27,7 +27,7 @@ type
     selector*: Selector[FdKind]
     listners*: Table[SocketHandle, Socket]
     receivers*: Table[SocketHandle, Socket]
-    queues*: Table[SelectEvent, RpcQueue]
+    queues*: Table[SelectEvent, InetMsgQueue]
     errorCount*: uint64
 
   FdKind* = object
@@ -42,7 +42,7 @@ type
                             ) {.nimcall.}
 
   EventHandler*[T] = proc (srv: ServerInfo[T],
-                            queue: RpcQueue,
+                            queue: InetMsgQueue,
                             ) {.nimcall.}
 
   ServerProcessor*[T] = proc (srv: ServerInfo[T],
@@ -91,7 +91,7 @@ proc newServerInfo*[T](
           selector: Selector[FdKind],
           listners: seq[Socket],
           receivers: seq[Socket],
-          queues: seq[RpcQueue],
+          queues: seq[InetMsgQueue],
         ): ServerInfo[T] = 
   ## setup server info
   result = new(ServerInfo[T])
@@ -99,7 +99,7 @@ proc newServerInfo*[T](
   result.selector = selector
   result.listners = initTable[SocketHandle, Socket]()
   result.receivers = initTable[SocketHandle, Socket]()
-  result.queues = initTable[SelectEvent, RpcQueue]()
+  result.queues = initTable[SelectEvent, InetMsgQueue]()
 
   # handle socket based listners (e.g. tcp)
   for listner in listners:

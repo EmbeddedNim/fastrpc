@@ -16,12 +16,12 @@ type
 
 proc fastRpcEventHandler*(
         srv: ServerInfo[FastRpcOpts],
-        queue: RpcQueue,
+        queue: InetMsgQueue,
       ) =
   logDebug("fastRpcEventHandler:eventHandler:")
 
   logDebug("fastRpcEventHandler:loop")
-  var item: RpcQueueItem
+  var item: InetMsgQueueItem
   while queue.tryRecv(item):
     logDebug("fastRpcEventHandler:item: ", repr(item))
     case item.cid[].kind:
@@ -38,6 +38,8 @@ proc fastRpcEventHandler*(
       logDebug("fastRpcEventHandler:sock: ", repr(sock.getFd()))
     of clCanBus:
       raise newException(Exception, "TODO: canbus sender")
+    of clEmpty:
+      raise newException(Exception, "empty inet handle")
 
 
 proc fastRpcReadHandler*(
@@ -45,7 +47,7 @@ proc fastRpcReadHandler*(
         sock: Socket,
       ) =
   var
-    buffer = newUniquePtr(MsgBuffer.init(srv.getOpts().bufferSize))
+    buffer = newQMsgBuffer(srv.getOpts().bufferSize)
     host: IpAddress
     port: Port
 
@@ -78,7 +80,7 @@ proc fastRpcReadHandler*(
 
   # logDebug("msg: data: ", repr(response))
   logDebug("readHandler:router: buffer: ", repr(buffer))
-  let res = router.inQueue.trySend(clientId, buffer)
+  let res = router.inQueue.trySendMsg(clientId, buffer)
   if not res:
     logInfo("readHandler:router:send: dropped ")
   logDebug("readHandler:router:inQueue: ", repr(router.inQueue.chan.peek()))

@@ -1,6 +1,6 @@
 
 import std/tables, std/macros, std/sysrand
-import std/isolation
+
 import std/selectors
 
 import threading/channels
@@ -8,6 +8,8 @@ export selectors, channels
 
 include mcu_utils/threads
 import mcu_utils/logging
+import mcu_utils/inettypes
+import mcu_utils/inetqueues
 
 import msgpack4nim
 import msgpack4nim/msgpack2json
@@ -16,13 +18,6 @@ export logging, msgpack4nim, msgpack2json
 
 import protocol
 export protocol
-
-type
-  # QMsgBuffer* = object
-  #   buffer: ptr UncheckedArray[byte]
-  #   pos*: int
-
-  QMsgBuffer* = UniquePtr[MsgBuffer]
 
 
 type
@@ -35,14 +30,6 @@ type
   RpcContext* = object
     id*: FastrpcId
     clientId*: InetClientHandle
-
-  RpcQueueItem* = ref object
-    cid*: InetClientHandle
-    data*: QMsgBuffer
-
-  RpcQueue* = ref object
-    evt*: SelectEvent # eventfds
-    chan*: Chan[RpcQueueItem]
 
   # Procedure signature accepted as an RPC call by server
   FastRpcProc* = proc(params: FastRpcParamsBuffer,
@@ -58,44 +45,8 @@ type
     procs*: Table[string, FastRpcProc]
     sysprocs*: Table[string, FastRpcProc]
     stacktraces*: bool
-    inQueue*: RpcQueue
-    outQueue*: RpcQueue
-
-proc newRpcQueueItem*(cid: InetClientHandle, data: sink QMsgBuffer): RpcQueueItem =
-  new(result)
-  result.cid = cid
-  result.data = move data
-
-proc newRpcQueue*(size: int): RpcQueue =
-  new(result)
-  result.evt = newSelectEvent()
-  result.chan = newChan[RpcQueueItem](size)
-
-proc send*(rq: RpcQueue, cid: InetClientHandle, data: sink QMsgBuffer) =
-  logDebug("datatypes:send:")
-  var item = isolate RpcQueueItem( cid: cid, data: data)
-  logDebug("datatypes:send:item: ", repr item)
-  rq.chan.send(item)
-  rq.evt.trigger()
-
-proc trySend*(rq: RpcQueue, cid: InetClientHandle, data: sink QMsgBuffer): bool =
-  logDebug("datatypes:send:")
-  var item = isolate newRpcQueueItem(cid, data)
-  let res = channels.trySend(
-    rq.chan,
-    item
-  )
-  if res:
-    logDebug("datatypes:send:trigger: ", repr(rq.evt))
-    rq.evt.trigger()
-  return res
-
-proc recv*(rq: RpcQueue): RpcQueueItem =
-  logDebug("datatypes:recv:")
-  rq.chan.recv(result)
-
-proc tryRecv*(rq: RpcQueue, item: var RpcQueueItem): bool =
-  return rq.chan.tryRecv(item)
+    inQueue*: InetMsgQueue
+    outQueue*: InetMsgQueue
 
 
 proc randBinString*(): RpcSubId =
