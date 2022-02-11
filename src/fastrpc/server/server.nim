@@ -10,36 +10,42 @@ type
     router*: FastRpcRouter
     bufferSize*: int
     prefixMsgSize*: bool
-    input*: Chan[FastRpcParamsBuffer]
-    output*: Chan[FastRpcParamsBuffer]
+    inetQueue*: Table[SelectEvent, InetMsgQueue]
     task*: Thread[FastRpcRouter]
 
 proc fastRpcEventHandler*(
         srv: ServerInfo[FastRpcOpts],
-        queue: InetMsgQueue,
+        evt: SelectEvent,
       ) =
   logDebug("fastRpcEventHandler:eventHandler:")
+  let router = srv.getOpts().router
 
   logDebug("fastRpcEventHandler:loop")
-  var item: InetMsgQueueItem
-  while queue.tryRecv(item):
-    logDebug("fastRpcEventHandler:item: ", repr(item))
-    case item.cid[].kind:
-    of clSocket:
-      withReceiverSocket(sock, item.cid[].fd, "fasteventhandler"):
-        var msg: MsgBuffer = item.data[]
-        logDebug("fastRpcEventHandler:sock: ", repr(sock.getFd()))
-        var lenBuf = newString(2)
-        lenBuf.toStrBe16(msg.data.len().int16)
-        sock.sendSafe(lenBuf & msg.data)
 
-    of clAddress:
-      var sock = srv.receivers[item.cid[].fd]
-      logDebug("fastRpcEventHandler:sock: ", repr(sock.getFd()))
-    of clCanBus:
-      raise newException(Exception, "TODO: canbus sender")
-    of clEmpty:
-      raise newException(Exception, "empty inet handle")
+  if evt == router.outQueue.evt:
+    var queue = router.outQueue
+    var item: InetMsgQueueItem
+    while queue.tryRecv(item):
+      logDebug("fastRpcEventHandler:item: ", repr(item))
+      case item.cid[].kind:
+      of clSocket:
+        withReceiverSocket(sock, item.cid[].fd, "fasteventhandler"):
+          var msg: MsgBuffer = item.data[]
+          logDebug("fastRpcEventHandler:sock: ", repr(sock.getFd()))
+          var lenBuf = newString(2)
+          lenBuf.toStrBe16(msg.data.len().int16)
+          sock.sendSafe(lenBuf & msg.data)
+      of clAddress:
+        var sock = srv.receivers[item.cid[].fd]
+        logDebug("fastRpcEventHandler:sock: ", repr(sock.getFd()))
+      of clCanBus:
+        raise newException(Exception, "TODO: canbus sender")
+      of clEmpty:
+        raise newException(Exception, "empty inet handle")
+  elif evt in router.queueHandlers:
+    echo "queue handlers!"
+  else:
+    raise newException(ValueError, "unknown queue event: " & repr(evt))
 
 
 proc fastRpcReadHandler*(
@@ -133,10 +139,10 @@ proc newFastRpcServer*(router: FastRpcRouter,
   result.opts.router.inQueue = InetMsgQueue.init(size=10)
   result.opts.router.outQueue = InetMsgQueue.init(size=10)
   
-  result.queues = @[
-    # result.opts.router.inQueue.evt,
-    result.opts.router.outQueue,
-  ]
+  result.opts.inetQueue = initTable[SelectEvent, InetMsgQueue]()
+  let rpcQueue = result.opts.router.outQueue
+  result.opts.inetQueue[rpcQueue.evt] = rpcQueue
+
   logDebug("newFastRpcServer:outQueue:evt: ", repr(router.outQueue.evt))
   logDebug("newFastRpcServer:inQueue:evt: ", repr(router.inQueue.evt))
   logDebug("newFastRpcServer:inQueue:chan: ", repr(router.inQueue.chan.addr().pointer))

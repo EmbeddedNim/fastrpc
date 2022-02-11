@@ -15,10 +15,11 @@ export options
 type
   Server*[T] = ref object
     opts*: T
-    queues*: seq[InetMsgQueue]
+    # queues*: seq[InetMsgQueue]
     readHandler*: ServerHandler[T]
     writeHandler*: ServerHandler[T]
     eventHandler*: EventHandler[T]
+    events*: seq[SelectEvent]
     postProcessHandler*: ServerProcessor[T]
 
   ServerInfo*[T] = ref object 
@@ -27,7 +28,6 @@ type
     selector*: Selector[FdKind]
     listners*: Table[SocketHandle, Socket]
     receivers*: Table[SocketHandle, Socket]
-    queues*: Table[SelectEvent, InetMsgQueue]
     errorCount*: uint64
 
   FdKind* = object
@@ -42,7 +42,8 @@ type
                             ) {.nimcall.}
 
   EventHandler*[T] = proc (srv: ServerInfo[T],
-                            queue: InetMsgQueue,
+                            # queue: InetMsgQueue,
+                            evt: SelectEvent,
                             ) {.nimcall.}
 
   ServerProcessor*[T] = proc (srv: ServerInfo[T],
@@ -91,7 +92,6 @@ proc newServerInfo*[T](
           selector: Selector[FdKind],
           listners: seq[Socket],
           receivers: seq[Socket],
-          queues: seq[InetMsgQueue],
         ): ServerInfo[T] = 
   ## setup server info
   result = new(ServerInfo[T])
@@ -99,7 +99,7 @@ proc newServerInfo*[T](
   result.selector = selector
   result.listners = initTable[SocketHandle, Socket]()
   result.receivers = initTable[SocketHandle, Socket]()
-  result.queues = initTable[SelectEvent, InetMsgQueue]()
+  # result.queues = initTable[SelectEvent, InetMsgQueue]()
 
   # handle socket based listners (e.g. tcp)
   for listner in listners:
@@ -107,8 +107,8 @@ proc newServerInfo*[T](
   # handle any packet receiver's (e.g. udp, can)
   for receiver in receivers:
     result.receivers[receiver.getFd()] = receiver
-  for queue in queues:
-    result.queues[queue.evt] = queue 
+  # for queue in queues:
+    # result.queues[queue.evt] = queue 
 
 proc sendSafe*(socket: Socket, data: string) =
   # Checks for disconnect errors when sending

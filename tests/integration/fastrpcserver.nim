@@ -66,7 +66,7 @@ proc timePublisher*(params: (InetEventQueue[int64], int)) {.thread.} =
 
   while true:
     var ts = isolate int64(getMonoTime().ticks() div 1000)
-    logInfo "timePublisher: ", "ts:", ts, "queue:", queue.chan.peek()
+    logInfo "timePublisher: ", "ts:", ts, "queue:len:", queue.chan.peek()
     discard queue.trySend(ts)
     os.sleep(delayMs)
 

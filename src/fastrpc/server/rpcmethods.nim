@@ -157,6 +157,13 @@ macro rpcImpl*(p: untyped, publish: untyped, qarg: untyped): untyped =
         let res = `procName`(obj, context)
         result = res.rpcPack()
 
+    if syspragma:
+      result.add quote do:
+        sysRegister(router, `path`, `rpcMethod`)
+    else:
+      result.add quote do:
+        register(router, `path`, `rpcMethod`)
+
   elif pubthread:
     result.add quote do:
       var `rpcMethod`: FastRpcEventProc
@@ -169,19 +176,7 @@ macro rpcImpl*(p: untyped, publish: untyped, qarg: untyped): untyped =
             let res = `procName`()
             result = rpcPack(res)
 
-    # if pubthread:
-    #   echo "PUBTHREAD: IMPL: "
-    #   result.add quote do:
-    #     # let subFunc: FastRpcProc = mkSubscriptionMethod(procName, `rpcMethod`)
-    #     # let subm: FastRpcProc = mkSubscriptionMethod(procName, `rpcMethod`)
-    #     router.queueHandlers[]
-
-  if syspragma:
-    result.add quote do:
-      sysRegister(router, `path`, `rpcMethod`)
-  else:
-    result.add quote do:
-      register(router, `path`, `rpcMethod`)
+      discard # register(router, `path`, `qarg`)
 
 
   # Register rpc wrapper

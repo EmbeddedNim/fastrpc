@@ -44,7 +44,7 @@ proc createRpcRouter*(): FastRpcRouter =
   result.procs = initTable[string, FastRpcProc]()
 
 proc register*(router: var FastRpcRouter, path: string, call: FastRpcEventProc) =
-  router.queueHandlers[path] = call
+  # router.queueHandlers[path] = call
   echo "registering:sub: ", path
 
 proc register*(router: var FastRpcRouter, path: string, call: FastRpcProc) =

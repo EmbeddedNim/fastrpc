@@ -46,7 +46,8 @@ type
   FastRpcRouter* = ref object
     procs*: Table[string, FastRpcProc]
     sysprocs*: Table[string, FastRpcProc]
-    queueHandlers*: Table[string, FastRpcEventProc]
+    queueHandlers*: Table[SelectEvent, FastRpcEventProc]
+    subs*: Table[string, SelectEvent]
     # subIds*: Table[queueEvent, RpcSubId]
     # subscribers*: Table[RpcSubId, InetClientHandle]
     stacktraces*: bool

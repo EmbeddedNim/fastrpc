@@ -58,12 +58,12 @@ template withClientSocketErrorCleanups*(socktable: Table[SocketHandle, Socket], 
 proc processEvents[T](srv: ServerInfo[T], selected: ReadyKey) = 
   logDebug("[SocketServer]::", "processUserEvents:", "selected:fd:", selected.fd)
   withExecHandler(eventHandler, srv.impl.eventHandler):
-    let evt = srv.getEvent(selected.fd)
-    let queue = srv.queues[evt]
+    let evt: SelectEvent = srv.getEvent(selected.fd)
     logDebug("[SocketServer]::", "processUserEvents:", "userEvent:", repr evt)
+    # let queue = srv.queues[evt]
 
     withClientSocketErrorCleanups(srv.receivers, selected):
-      eventHandler(srv, queue)
+      eventHandler(srv, evt)
 
 proc processWrites[T](srv: ServerInfo[T], selected: ReadyKey) = 
   logDebug("[SocketServer]::", "processWrites:", "selected:fd:", selected.fd)
@@ -139,11 +139,11 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
 
     registerHandle(select, socket.getFd(), evts, initFdKind(stype))
   
-  for queue in serverImpl.queues:
-    logDebug "[SocketServer]::", "userEvent:register:", repr(queue.evt)
-    registerEvent(select, queue.evt, initFdKind(queue.evt))
+  for event in serverImpl.events:
+    logDebug "[SocketServer]::", "userEvent:register:", repr(event)
+    registerEvent(select, event, initFdKind(event))
 
-  var srv = newServerInfo[T](serverImpl, select, listners, receivers, serverImpl.queues)
+  var srv = newServerInfo[T](serverImpl, select, listners, receivers)
 
   while true:
     var keys: seq[ReadyKey] = select.select(-1)
