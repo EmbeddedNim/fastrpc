@@ -1,3 +1,6 @@
+import mcu_utils/inettypes
+import mcu_utils/inetqueues
+
 import router
 import ../servertypes
 import ../socketserver
@@ -52,8 +55,21 @@ proc fastRpcEventHandler*(
     srv.fastRpcInetReplies(router.outQueue)
   elif evt == router.registerQueue.evt:
     logDebug("fastRpcEventHandler:registerQueue: ", repr(evt))
-  elif evt in router.eventProcs:
-    logDebug("fastRpcEventHandler:eventProcs: ", repr(evt))
+    var item: InetQueueItem[(RpcSubId, SelectEvent)]
+    while router.registerQueue.tryRecv(item):
+      logDebug("fastRpcEventHandler:regQueue:cid: ", repr item.cid)
+      let
+        cid = item.cid
+        # subId = item.data[0]
+        evt = item.data[1]
+      router.subEventProcs[evt].cids.incl(cid)
+  elif evt in router.subEventProcs:
+    logDebug("fastRpcEventHandler:subEventProcs: ", repr(evt))
+    let eventProc = router.subEventProcs[evt].eventProc
+    let msg: FastRpcParamsBuffer = eventProc()
+    for cid in router.subEventProcs[evt].cids:
+      var qmsg = newQMsgBuffer(msg.buf.data, 0)
+      discard router.outQueue.trySendMsg(cid, qmsg)
   else:
     raise newException(ValueError, "unknown queue event: " & repr(evt))
 
@@ -159,8 +175,10 @@ proc newFastRpcServer*(router: FastRpcRouter,
   # result.opts.inetQueue = @[outQueue]
   result.events = @[
     outQueue.evt,
+    registerQueue.evt,
   ] 
 
+  logDebug("newFastRpcServer:registerQueue:evt: ", repr(router.registerQueue.evt))
   logDebug("newFastRpcServer:outQueue:evt: ", repr(router.outQueue.evt))
   logDebug("newFastRpcServer:inQueue:evt: ", repr(router.inQueue.evt))
   logDebug("newFastRpcServer:inQueue:chan: ", repr(router.inQueue.chan.addr().pointer))

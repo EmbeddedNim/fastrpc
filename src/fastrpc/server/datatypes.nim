@@ -1,10 +1,10 @@
 
-import std/tables, std/macros, std/sysrand
+import std/tables, std/sets, std/macros, std/sysrand
 
 import std/selectors
 
 import threading/channels
-export selectors, channels
+export sets, selectors, channels
 
 include mcu_utils/threads
 import mcu_utils/logging
@@ -42,15 +42,19 @@ type
   FastRpcAddressUnresolvableError* = object of ValueError
 
   RpcSubId* = int64
-  RpcSubIdQueue* = InetEventQueue[InetQueueItem[RpcSubId]]
+  RpcSubIdQueue* = InetEventQueue[InetQueueItem[(RpcSubId, SelectEvent)]]
 
   FastRpcEventProc* = proc(): FastRpcParamsBuffer {.gcsafe, closure.}
+
+  RpcSubClients* = object
+    eventProc*: FastRpcEventProc
+    cids*: HashSet[InetClientHandle]
 
   FastRpcRouter* = ref object
     procs*: Table[string, FastRpcProc]
     sysprocs*: Table[string, FastRpcProc]
-    subEvents*: Table[string, SelectEvent]
-    eventProcs*: Table[SelectEvent, FastRpcEventProc]
+    subEventProcs*: Table[SelectEvent, RpcSubClients]
+    subNames*: Table[string, SelectEvent]
     stacktraces*: bool
     inQueue*: InetMsgQueue
     outQueue*: InetMsgQueue
@@ -66,7 +70,8 @@ proc randBinString*(): RpcSubId =
 proc newFastRpcRouter*(): FastRpcRouter =
   new(result)
   result.procs = initTable[string, FastRpcProc]()
-  # result.sysprocs = initTable[string, FastRpcProc]()
+  result.sysprocs = initTable[string, FastRpcProc]()
+  result.subEventProcs = initTable[SelectEvent, RpcSubClients]()
   result.stacktraces = defined(debug)
 
 proc listMethods*(rt: FastRpcRouter): seq[string] =

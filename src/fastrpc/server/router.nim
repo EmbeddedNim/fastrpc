@@ -44,8 +44,9 @@ proc createRpcRouter*(): FastRpcRouter =
   result.procs = initTable[string, FastRpcProc]()
 
 proc register*(router: var FastRpcRouter, path: string, evt: SelectEvent, call: FastRpcEventProc) =
-  router.eventProcs[evt] = call
-  router.subEvents[path] = evt
+  router.subNames[path] = evt
+  let cids = initHashSet[InetClientHandle]()
+  router.subEventProcs[evt] = RpcSubClients(eventProc: call, cids: cids)
   echo "registering:sub: ", path
 
 proc register*(router: var FastRpcRouter, path: string, call: FastRpcProc) =
@@ -79,9 +80,20 @@ proc callMethod*(
       # rpcProc = router.procs.getOrDefault(req.procName)
       echo "CALL:METHOD: SUBSCRIBE"
       let subid: RpcSubId = randBinString()
-      var item = isolate InetQueueItem[RpcSubId].init(clientId, subid)
+      let hasSubProc = req.procname in router.subNames
+      if not hasSubProc:
+        let methodNotFound = req.procName & " is not a registered RPC method."
+        return wrapResponseError(req.id, METHOD_NOT_FOUND,
+                                 methodNotFound, nil,
+                                 router.stacktraces)
+      let val = (subid, router.subNames[req.procName])
+      var item =
+        isolate InetQueueItem[(RpcSubId, SelectEvent)].init(clientId, val)
       if router.registerQueue.trySend(item):
         let resp = %* {"subscription": subid}
+        echo "CALL:METHOD:SUBSCRIBE:registerQueue:evt: ", repr router.registerQueue.evt
+        echo "CALL:METHOD:SUBSCRIBE:registerQueue:chan: ", repr router.registerQueue.chan.peek
+        echo "CALL:METHOD:SUBSCRIBE:resp: ", $resp
         return FastRpcResponse(kind: Response, id: req.id,
                                  result: resp.rpcPack())
       else:
