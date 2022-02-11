@@ -7,3 +7,6 @@ switch("define", "debug")
 switch("threads", "on")
 
 switch("define", "McuUtilsLoggingLevel:lvlDebug")
+
+# switch("define", "nimArcDebug")
+# switch("define", "traceArc")
