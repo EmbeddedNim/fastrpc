@@ -80,11 +80,11 @@ macro rpcImpl*(p: untyped, publish: untyped, qarg: untyped): untyped =
   ## format (msgpack) and output parameters are automatically marshalled
   ## back to the fast rpc binary format (msgpack) for transport.
   
-  if publish.kind != nnkNilLit:
-    echo "RPC: pub: tp: ", typeof publish
-    echo "RPC: pub: kd: ", publish.kind
-    echo "RPC: pub: ", repr publish
-    echo "RPC: ", p.treeRepr
+  # if publish.kind != nnkNilLit:
+    # echo "RPC: pub: tp: ", typeof publish
+    # echo "RPC: pub: kd: ", publish.kind
+    # echo "RPC: pub: ", repr publish
+    # echo "RPC: ", p.treeRepr
     
   let
     path = $p[0]
@@ -116,7 +116,6 @@ macro rpcImpl*(p: untyped, publish: untyped, qarg: untyped): untyped =
 
     rpcMethod = ident(procNameStr & "RpcMethod")
     rpcSubscribeMethod = ident(procNameStr & "RpcSubscribe")
-
 
   var
     # process the argument types
@@ -160,46 +159,41 @@ macro rpcImpl*(p: untyped, publish: untyped, qarg: untyped): untyped =
 
   elif pubthread:
     result.add quote do:
-      `paramTypes`
-
-      proc `procName`(`paramsIdent`: `paramTypeName`,
-                      ): `ReturnType` =
-        {.cast(gcsafe).}:
-          `paramSetups`
-          `procBody`
-
+      var `rpcMethod`: FastRpcEventProc
+      template `procName`(): `ReturnType` =
+        `procBody`
       closureScope: # 
-        let `rpcMethod` = proc(): FastRpcParamsBuffer =
-          let res = `procBody`
-          result = res.rpcPack()
+        `rpcMethod` =
 
+          proc(): FastRpcParamsBuffer =
+            let res = `procName`()
+            result = rpcPack(res)
 
-  # Register rpc wrapper
-  if pubthread:
-    echo "PUBTHREAD: IMPL: "
-    # result.add quote do:
-      # let subFunc: FastRpcProc = mkSubscriptionMethod(procName, `rpcMethod`)
-      # let subm: FastRpcProc = mkSubscriptionMethod(procName, `rpcMethod`)
-      # register(router, `path`, `rpcMethod`)
-  elif syspragma:
+    # if pubthread:
+    #   echo "PUBTHREAD: IMPL: "
+    #   result.add quote do:
+    #     # let subFunc: FastRpcProc = mkSubscriptionMethod(procName, `rpcMethod`)
+    #     # let subm: FastRpcProc = mkSubscriptionMethod(procName, `rpcMethod`)
+    #     router.queueHandlers[]
+
+  if syspragma:
     result.add quote do:
       sysRegister(router, `path`, `rpcMethod`)
   else:
     result.add quote do:
       register(router, `path`, `rpcMethod`)
-  echo "ROUTER:RESULT: ", result.repr()
+
+
+  # Register rpc wrapper
+  # echo "RPC:RESULT: ", result.repr()
 
 template rpc*(p: untyped): untyped =
   rpcImpl(p, nil, nil)
 
 template rpcPublisher*(args: static[Millis], p: untyped): untyped =
-  static:
-    echo "RPC: PUBLISHER TICK"
   rpcImpl(p, args, nil)
 
-template rpcEventSubscriber*(qarg: untyped, p: untyped): untyped =
-  static:
-    echo "RPC: PUBLISHER: "
+template rpcEventSubscriber*(qarg: typed, p: untyped): untyped =
   rpcImpl(p, "thread", qarg)
 
 # proc addStandardSyscalls*(router: var FastRpcRouter) =
@@ -287,20 +281,22 @@ macro rpcRegisterMethodsProcArgs*(name: untyped, args: varargs[untyped]): untype
     procNameStr = pathStr.makeProcName()
     # public rpc proc
     procName = ident(procNameStr)
+    rname = ident("router")
 
   # Create the proc's that hold the users code 
   var procAst = quote do:
-    proc `procName`*(router {.inject.}: var FastRpcRouter) =
+    proc `procName`*(`rname`: var FastRpcRouter) =
       `body`
   
   var procParams = procAst[3]
   for param in params:
-    echo "param: ", param.treeRepr
+    # echo "param: ", param.treeRepr
     procParams.add(newIdentDefs(param[0], param[1]))
 
   result.add procAst
   # echo "ROUTER:INITPROC:ARGS: ", parameters.treeRepr
   # echo "ROUTER:INITPROC: ", result.treeRepr
+  echo "ROUTER:RESULT: ", result.repr()
 
 template rpc_methods*(procName, blk: untyped): untyped {.
     deprecated: "use `rpcRegisterMethodsProc` instead".} =

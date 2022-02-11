@@ -44,26 +44,13 @@ rpcRegisterMethodsProcArgs(
 
     return Millis(t1-t0)
 
-  proc microspub(): int {.rpcEventSubscriber(timerQueue).} =
+  proc microspub(): int64 {.rpcEventSubscriber(timerQueue).} =
 
-    # let ts = timerQueue.peek()
     var ts: int64 = 0
     if timerQueue.tryRecv(ts):
       # let ts = timerQueue.recv()
       echo "ts: ", 0
-    return ts
-
-  # proc adcstream(count: int): seq[int] {.rpcPublisherThread().} =
-  #   # var subid = subs.subscribeWithThread(context, run_micros, % delay)
-  #   while true:
-  #     echo "adcstream ts'es"
-  #     var vals = newSeq[int]()
-  #     for i in 0..<20:
-  #       var ts = int(getMonoTime().ticks() div 1000)
-  #       vals.add ts
-  #     echo "adcstream publish"
-  #     discard rpcPublish(vals)
-  #     os.sleep(count)
+    ts
 
   proc testerror(msg: string): string {.rpc.} =
     echo("test error: ", "what is your favorite color?")
@@ -78,8 +65,9 @@ proc timePublisher*(params: (InetEventQueue[int64], int)) {.thread.} =
     delayMs = params[1]
 
   while true:
-    var ts = int64(getMonoTime().ticks() div 1000)
-    queue.send(ts)
+    var ts = isolate int64(getMonoTime().ticks() div 1000)
+    logInfo "timePublisher: ", "ts:", ts, "queue:", queue.chan.peek()
+    discard queue.trySend(ts)
     os.sleep(delayMs)
 
 
@@ -91,7 +79,7 @@ when isMainModule:
 
   var timer1q = InetEventQueue[int64].init(10)
   var timerThr: Thread[(InetEventQueue[int64], int)]
-  timerThr.createThread(timePublisher, (timer1q , 100))
+  timerThr.createThread(timePublisher, (timer1q , 500))
 
   echo "running fast rpc example"
   var router = newFastRpcRouter()

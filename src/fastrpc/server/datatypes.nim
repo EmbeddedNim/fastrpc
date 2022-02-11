@@ -41,12 +41,12 @@ type
 
   RpcSubId* = int64
 
-  FastRpcEvent* = proc(): FastRpcParamsBuffer {.gcsafe, closure.}
+  FastRpcEventProc* = proc(): FastRpcParamsBuffer {.gcsafe, closure.}
 
   FastRpcRouter* = ref object
     procs*: Table[string, FastRpcProc]
     sysprocs*: Table[string, FastRpcProc]
-    subMethods*: Table[string, FastRpcProc]
+    queueHandlers*: Table[string, FastRpcEventProc]
     # subIds*: Table[queueEvent, RpcSubId]
     # subscribers*: Table[RpcSubId, InetClientHandle]
     stacktraces*: bool
