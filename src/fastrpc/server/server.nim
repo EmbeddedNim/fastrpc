@@ -142,6 +142,7 @@ proc newFastRpcServer*(router: FastRpcRouter,
   result.opts.inetQueue = initTable[SelectEvent, InetMsgQueue]()
   let rpcQueue = result.opts.router.outQueue
   result.opts.inetQueue[rpcQueue.evt] = rpcQueue
+  result.events = @[rpcQueue.evt] 
 
   logDebug("newFastRpcServer:outQueue:evt: ", repr(router.outQueue.evt))
   logDebug("newFastRpcServer:inQueue:evt: ", repr(router.inQueue.evt))
