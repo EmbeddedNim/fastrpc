@@ -10,8 +10,34 @@ type
     router*: FastRpcRouter
     bufferSize*: int
     prefixMsgSize*: bool
-    inetQueue*: Table[SelectEvent, InetMsgQueue]
+    # inetQueue*: seq[InetMsgQueue]
     task*: Thread[FastRpcRouter]
+
+## =================== Handle RPC Events =================== ##
+
+proc fastRpcInetReplies*(
+        srv: ServerInfo[FastRpcOpts],
+        queue: InetMsgQueue,
+      ) =
+  logDebug("fastRpcEventHandler:eventHandler:")
+  var item: InetMsgQueueItem
+  while queue.tryRecv(item):
+    logDebug("fastRpcEventHandler:item: ", repr(item))
+    case item.cid[].kind:
+    of clSocket:
+      withReceiverSocket(sock, item.cid[].fd, "fasteventhandler"):
+        var msg: MsgBuffer = item.data[]
+        logDebug("fastRpcEventHandler:sock: ", repr(sock.getFd()))
+        var lenBuf = newString(2)
+        lenBuf.toStrBe16(msg.data.len().int16)
+        sock.sendSafe(lenBuf & msg.data)
+    of clAddress:
+      var sock = srv.receivers[item.cid[].fd]
+      logDebug("fastRpcEventHandler:sock: ", repr(sock.getFd()))
+    of clCanBus:
+      raise newException(Exception, "TODO: canbus sender")
+    of clEmpty:
+      raise newException(Exception, "empty inet handle")
 
 proc fastRpcEventHandler*(
         srv: ServerInfo[FastRpcOpts],
@@ -23,31 +49,15 @@ proc fastRpcEventHandler*(
   logDebug("fastRpcEventHandler:loop")
 
   if evt == router.outQueue.evt:
-    var queue = router.outQueue
-    var item: InetMsgQueueItem
-    while queue.tryRecv(item):
-      logDebug("fastRpcEventHandler:item: ", repr(item))
-      case item.cid[].kind:
-      of clSocket:
-        withReceiverSocket(sock, item.cid[].fd, "fasteventhandler"):
-          var msg: MsgBuffer = item.data[]
-          logDebug("fastRpcEventHandler:sock: ", repr(sock.getFd()))
-          var lenBuf = newString(2)
-          lenBuf.toStrBe16(msg.data.len().int16)
-          sock.sendSafe(lenBuf & msg.data)
-      of clAddress:
-        var sock = srv.receivers[item.cid[].fd]
-        logDebug("fastRpcEventHandler:sock: ", repr(sock.getFd()))
-      of clCanBus:
-        raise newException(Exception, "TODO: canbus sender")
-      of clEmpty:
-        raise newException(Exception, "empty inet handle")
-  elif evt in router.queueHandlers:
-    echo "queue handlers!"
+    srv.fastRpcInetReplies(router.outQueue)
+  elif evt == router.registerQueue.evt:
+    logDebug("fastRpcEventHandler:registerQueue: ", repr(evt))
+  elif evt in router.eventProcs:
+    logDebug("fastRpcEventHandler:eventProcs: ", repr(evt))
   else:
     raise newException(ValueError, "unknown queue event: " & repr(evt))
 
-
+## =================== Read RPC Tasks =================== ##
 proc fastRpcReadHandler*(
         srv: ServerInfo[FastRpcOpts],
         sock: Socket,
@@ -92,6 +102,7 @@ proc fastRpcReadHandler*(
     logInfo("readHandler:router:send: dropped ")
   logDebug("readHandler:router:inQueue: ", repr(router.inQueue.chan.peek()))
 
+## =================== Execute RPC Tasks =================== ##
 proc fastRpcExec*(router: FastRpcRouter, item: InetMsgQueueItem): bool =
   logDebug("readHandler:router: inQueue: ", repr(router.inQueue.chan.peek()))
   logDebug("fastrpcTask:item: ", repr(item))
@@ -112,16 +123,15 @@ proc fastRpcTask*(router: FastRpcRouter) {.thread.} =
     let res = router.fastRpcExec(item)
     logDebug("fastrpcTask:sent:res: ", repr(res))
 
-
-proc postServerProcessor(srv: ServerInfo[FastRpcOpts],
-                         results: seq[ReadyKey],
-                          ) =
+proc postServerProcessor(srv: ServerInfo[FastRpcOpts], results: seq[ReadyKey]) =
   var item: InetMsgQueueItem 
   let router = srv.impl.opts.router
   while router.inQueue.tryRecv(item):
     let res = router.fastRpcExec(item)
     logDebug("fastrpcProcessor:processed:sent:res: ", repr(res))
 
+
+## =================== Fast RPC Server Implementation =================== ##
 proc newFastRpcServer*(router: FastRpcRouter,
                        bufferSize = 1400,
                        prefixMsgSize = false,
@@ -136,13 +146,20 @@ proc newFastRpcServer*(router: FastRpcRouter,
     router: router,
     prefixMsgSize: prefixMsgSize
   )
-  result.opts.router.inQueue = InetMsgQueue.init(size=10)
-  result.opts.router.outQueue = InetMsgQueue.init(size=10)
+
+  let
+    inQueue = InetMsgQueue.init(size=8)
+    outQueue = InetMsgQueue.init(size=8)
+    registerQueue = RpcSubIdQueue.init(size=8)
   
-  result.opts.inetQueue = initTable[SelectEvent, InetMsgQueue]()
-  let rpcQueue = result.opts.router.outQueue
-  result.opts.inetQueue[rpcQueue.evt] = rpcQueue
-  result.events = @[rpcQueue.evt] 
+  result.opts.router.inQueue = inQueue
+  result.opts.router.outQueue = outQueue
+  result.opts.router.registerQueue = registerQueue
+
+  # result.opts.inetQueue = @[outQueue]
+  result.events = @[
+    outQueue.evt,
+  ] 
 
   logDebug("newFastRpcServer:outQueue:evt: ", repr(router.outQueue.evt))
   logDebug("newFastRpcServer:inQueue:evt: ", repr(router.inQueue.evt))

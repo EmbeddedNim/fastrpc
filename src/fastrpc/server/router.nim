@@ -1,4 +1,4 @@
-import tables, strutils, macros, os
+import tables, strutils, macros
 
 import mcu_utils/basictypes
 import mcu_utils/msgbuffer
@@ -43,8 +43,9 @@ proc createRpcRouter*(): FastRpcRouter =
   result = new(FastRpcRouter)
   result.procs = initTable[string, FastRpcProc]()
 
-proc register*(router: var FastRpcRouter, path: string, call: FastRpcEventProc) =
-  # router.queueHandlers[path] = call
+proc register*(router: var FastRpcRouter, path: string, evt: SelectEvent, call: FastRpcEventProc) =
+  router.eventProcs[evt] = call
+  router.subEvents[path] = evt
   echo "registering:sub: ", path
 
 proc register*(router: var FastRpcRouter, path: string, call: FastRpcProc) =
@@ -75,9 +76,20 @@ proc callMethod*(
     of SystemRequest:
       rpcProc = router.sysprocs.getOrDefault(req.procName)
     of Subscribe:
-      rpcProc = router.procs.getOrDefault(req.procName)
+      # rpcProc = router.procs.getOrDefault(req.procName)
+      echo "CALL:METHOD: SUBSCRIBE"
+      let subid: RpcSubId = randBinString()
+      var item = isolate InetQueueItem[RpcSubId].init(clientId, subid)
+      if router.registerQueue.trySend(item):
+        let resp = %* {"subscription": subid}
+        return FastRpcResponse(kind: Response, id: req.id,
+                                 result: resp.rpcPack())
+      else:
+        return wrapResponseError(
+                  req.id, INTERNAL_ERROR,
+                  "", nil, router.stacktraces)
     else:
-      result = wrapResponseError(
+      return wrapResponseError(
                   req.id,
                   SERVER_ERROR,
                   "unimplemented request typed",

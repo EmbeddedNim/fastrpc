@@ -99,7 +99,6 @@ macro rpcImpl*(p: untyped, publish: untyped, qarg: untyped): untyped =
   let
     # determine if this is a "system" rpc method
     pubthread = publish.kind == nnkStrLit and publish.strVal == "thread"
-    pubtask = publish.kind == nnkInt64Lit 
     syspragma = not pragmas.findChild(it.repr == "system").isNil
 
     # rpc method names
@@ -115,7 +114,6 @@ macro rpcImpl*(p: untyped, publish: untyped, qarg: untyped): untyped =
     paramTypeName = ident("RpcType_" & procNameStr)
 
     rpcMethod = ident(procNameStr & "RpcMethod")
-    rpcSubscribeMethod = ident(procNameStr & "RpcSubscribe")
 
   var
     # process the argument types
@@ -176,7 +174,7 @@ macro rpcImpl*(p: untyped, publish: untyped, qarg: untyped): untyped =
             let res = `procName`()
             result = rpcPack(res)
 
-      discard # register(router, `path`, `qarg`)
+      register(router, `path`, `qarg`.evt, `rpcMethod`)
 
 
   # Register rpc wrapper

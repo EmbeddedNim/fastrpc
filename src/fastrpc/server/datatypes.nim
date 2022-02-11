@@ -42,20 +42,19 @@ type
   FastRpcAddressUnresolvableError* = object of ValueError
 
   RpcSubId* = int64
+  RpcSubIdQueue* = InetEventQueue[InetQueueItem[RpcSubId]]
 
   FastRpcEventProc* = proc(): FastRpcParamsBuffer {.gcsafe, closure.}
 
   FastRpcRouter* = ref object
     procs*: Table[string, FastRpcProc]
     sysprocs*: Table[string, FastRpcProc]
-    queueHandlers*: Table[SelectEvent, FastRpcEventProc]
-    subs*: Table[string, SelectEvent]
-    # subIds*: Table[queueEvent, RpcSubId]
-    # subscribers*: Table[RpcSubId, InetClientHandle]
+    subEvents*: Table[string, SelectEvent]
+    eventProcs*: Table[SelectEvent, FastRpcEventProc]
     stacktraces*: bool
     inQueue*: InetMsgQueue
     outQueue*: InetMsgQueue
-
+    registerQueue*: RpcSubIdQueue
 
 proc randBinString*(): RpcSubId =
   var idarr: array[sizeof(RpcSubId), byte]
@@ -89,7 +88,7 @@ template rpcPack*(res: JsonNode): FastRpcParamsBuffer =
   var jpack = res.fromJsonNode()
   var ss = MsgBuffer.init(jpack)
   ss.setPosition(jpack.len())
-  (buf: ss)
+  FastRpcParamsBuffer(buf: ss)
 
 proc rpcPack*[T](res: T): FastRpcParamsBuffer =
   var ss = MsgBuffer.init()
