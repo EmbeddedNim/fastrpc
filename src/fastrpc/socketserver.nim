@@ -35,7 +35,9 @@ template withReceiverSocket*(name: untyped, fd: SocketHandle, modname: string, b
   except KeyError:
     logDebug("[SocketServer]::", modname, ":missing socket: ", repr(fd), "skipping")
 
-template withClientSocketErrorCleanups*(socktable: Table[SocketHandle, Socket], key: ReadyKey, blk: untyped) =
+template withClientSocketErrorCleanups*(socktable: Table[SocketHandle, Socket],
+                                        key: ReadyKey,
+                                        blk: untyped) =
   ## handle client socket errors / reading / writing / etc
   try:
     `blk`
@@ -48,7 +50,6 @@ template withClientSocketErrorCleanups*(socktable: Table[SocketHandle, Socket], 
   except InetClientError:
     `socktable`.del(key.fd.SocketHandle)
     srv.selector.unregister(key.fd)
-
     discard posix.close(key.fd.cint)
     logError("receiver socket rx/tx error: ", $(key.fd))
 
@@ -75,8 +76,10 @@ proc processWrites[T](srv: ServerInfo[T], selected: ReadyKey) =
 proc processReads[T](srv: ServerInfo[T], selected: ReadyKey) = 
   logDebug("[SocketServer]::", "\n")
   logDebug("[SocketServer]::", "processReads:", "selected:fd:", selected.fd)
-  logDebug("[SocketServer]::", "processReads:", "listners:fd:", srv.listners.keys().toSeq().mapIt(it.int()).repr())
-  logDebug("[SocketServer]::", "processReads:", "receivers:fd:", srv.receivers.keys().toSeq().mapIt(it.int()).repr())
+  logDebug("[SocketServer]::", "processReads:", "listners:fd:",
+            srv.listners.keys().toSeq().mapIt(it.int()).repr())
+  logDebug("[SocketServer]::", "processReads:", "receivers:fd:",
+            srv.receivers.keys().toSeq().mapIt(it.int()).repr())
 
   if srv.listners.hasKey(selected.fd.SocketHandle):
     let server = srv.listners[selected.fd.SocketHandle]
@@ -108,7 +111,9 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
 
   logInfo "[SocketServer]::", "starting"
   for ia in ipaddrs:
-    logInfo "[SocketServer]::", "creating socket on:", "ip:", $ia.host, "port:", $ia.port, $ia.inetDomain(), "sockType:", $ia.socktype, $ia.protocol
+    logInfo "[SocketServer]::", "creating socket on:",
+            "ip:", $ia.host, "port:", $ia.port, $ia.inetDomain(),
+            "sockType:", $ia.socktype, $ia.protocol
 
     var socket = newSocket(
       domain=ia.inetDomain(),

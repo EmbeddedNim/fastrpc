@@ -147,6 +147,11 @@ proc postServerProcessor(srv: ServerInfo[FastRpcOpts], results: seq[ReadyKey]) =
   while router.inQueue.tryRecv(item):
     let res = router.fastRpcExec(item)
     logDebug("fastrpcProcessor:processed:sent:res: ", repr(res))
+  
+  for evt, subcli in router.subEventProcs.pairs():
+    for cid, subid in subcli.subs:
+      logInfo("fastrpcProcessor:processed:cleanup:", repr(subid), "cid:", cid)
+
 
 
 ## =================== Fast RPC Server Implementation =================== ##
