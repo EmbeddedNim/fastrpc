@@ -177,6 +177,8 @@ proc newFastRpcServer*(router: FastRpcRouter,
     outQueue.evt,
     registerQueue.evt,
   ] 
+  for evt, subcli in router.subEventProcs:
+    result.events.add evt
 
   logDebug("newFastRpcServer:registerQueue:evt: ", repr(router.registerQueue.evt))
   logDebug("newFastRpcServer:outQueue:evt: ", repr(router.outQueue.evt))
