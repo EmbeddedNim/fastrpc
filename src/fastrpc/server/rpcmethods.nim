@@ -65,7 +65,7 @@ proc mkParamsType*(paramsIdent, paramsType, params: NimNode): NimNode =
   typObj[0][2][2] = recList
   result = typObj
 
-macro rpcImpl*(p: untyped, publish: untyped): untyped =
+macro rpcImpl*(p: untyped, publish: untyped, qarg: untyped): untyped =
   ## Define a remote procedure call.
   ## Input and return parameters are defined using proc's with the `rpc` 
   ## pragma. 
@@ -93,8 +93,10 @@ macro rpcImpl*(p: untyped, publish: untyped): untyped =
     body = p[6]
 
   result = newStmtList()
-  let
+  var
     parameters = params
+
+  let
     # determine if this is a "system" rpc method
     pubthread = publish.kind == nnkStrLit and publish.strVal == "thread"
     pubtask = publish.kind == nnkInt64Lit 
@@ -114,6 +116,7 @@ macro rpcImpl*(p: untyped, publish: untyped): untyped =
 
     rpcMethod = ident(procNameStr & "RpcMethod")
     rpcSubscribeMethod = ident(procNameStr & "RpcSubscribe")
+
 
   var
     # process the argument types
@@ -135,50 +138,69 @@ macro rpcImpl*(p: untyped, publish: untyped): untyped =
                       ident "void"
 
   # Create the proc's that hold the users code 
-  result.add quote do:
-    `paramTypes`
+  if not pubthread:
+    result.add quote do:
+      `paramTypes`
 
-    proc `procName`(`paramsIdent`: `paramTypeName`,
-                    `ctxName`: `ContextType`
-                    ): `ReturnType` =
-      {.cast(gcsafe).}:
-        `paramSetups`
-        `procBody`
+      proc `procName`(`paramsIdent`: `paramTypeName`,
+                      `ctxName`: `ContextType`
+                      ): `ReturnType` =
+        {.cast(gcsafe).}:
+          `paramSetups`
+          `procBody`
 
-  # Create the rpc wrapper procs
-  result.add quote do:
-    proc `rpcMethod`(params: FastRpcParamsBuffer, context: `ContextType`): FastRpcParamsBuffer {.gcsafe, nimcall.} =
-      var obj: `paramTypeName`
-      obj.rpcUnpack(params)
+    # Create the rpc wrapper procs
+    result.add quote do:
+      proc `rpcMethod`(params: FastRpcParamsBuffer, context: `ContextType`): FastRpcParamsBuffer {.gcsafe, nimcall.} =
+        var obj: `paramTypeName`
+        obj.rpcUnpack(params)
 
-      let res = `procName`(obj, context)
-      result = res.rpcPack()
+        let res = `procName`(obj, context)
+        result = res.rpcPack()
+
+  elif pubthread:
+    result.add quote do:
+      `paramTypes`
+
+      proc `procName`(`paramsIdent`: `paramTypeName`,
+                      ): `ReturnType` =
+        {.cast(gcsafe).}:
+          `paramSetups`
+          `procBody`
+
+      closureScope: # 
+        let `rpcMethod` = proc(): FastRpcParamsBuffer =
+          let res = `procBody`
+          result = res.rpcPack()
+
 
   # Register rpc wrapper
   if pubthread:
-    result.add quote do:
+    echo "PUBTHREAD: IMPL: "
+    # result.add quote do:
       # let subFunc: FastRpcProc = mkSubscriptionMethod(procName, `rpcMethod`)
       # let subm: FastRpcProc = mkSubscriptionMethod(procName, `rpcMethod`)
-      register(router, `path`, `rpcMethod`)
+      # register(router, `path`, `rpcMethod`)
   elif syspragma:
     result.add quote do:
       sysRegister(router, `path`, `rpcMethod`)
   else:
     result.add quote do:
       register(router, `path`, `rpcMethod`)
+  echo "ROUTER:RESULT: ", result.repr()
 
 template rpc*(p: untyped): untyped =
-  rpcImpl(p, nil)
+  rpcImpl(p, nil, nil)
 
 template rpcPublisher*(args: static[Millis], p: untyped): untyped =
   static:
     echo "RPC: PUBLISHER TICK"
-  rpcImpl(p, args)
+  rpcImpl(p, args, nil)
 
-template rpcPublisherThread*(p: untyped): untyped =
+template rpcEventSubscriber*(qarg: untyped, p: untyped): untyped =
   static:
-    echo "RPC: PUBLISHER THREAD"
-  rpcImpl(p, "thread")
+    echo "RPC: PUBLISHER: "
+  rpcImpl(p, "thread", qarg)
 
 # proc addStandardSyscalls*(router: var FastRpcRouter) =
 
@@ -249,6 +271,36 @@ template rpcRegisterMethodsProc*(name, blk: untyped): untyped =
     ## convenience function to create a new router and init it
     result = newFastRpcRouter()
     `name`(result)
+
+macro rpcRegisterMethodsProcArgs*(name: untyped, args: varargs[untyped]): untyped =
+
+  assert args.len() >= 2
+  let
+    params = args[0..^2]
+    body = args[^1]
+    path = name
+
+  result = newStmtList()
+  let
+    # router names
+    pathStr = $path
+    procNameStr = pathStr.makeProcName()
+    # public rpc proc
+    procName = ident(procNameStr)
+
+  # Create the proc's that hold the users code 
+  var procAst = quote do:
+    proc `procName`*(router {.inject.}: var FastRpcRouter) =
+      `body`
+  
+  var procParams = procAst[3]
+  for param in params:
+    echo "param: ", param.treeRepr
+    procParams.add(newIdentDefs(param[0], param[1]))
+
+  result.add procAst
+  # echo "ROUTER:INITPROC:ARGS: ", parameters.treeRepr
+  # echo "ROUTER:INITPROC: ", result.treeRepr
 
 template rpc_methods*(procName, blk: untyped): untyped {.
     deprecated: "use `rpcRegisterMethodsProc` instead".} =

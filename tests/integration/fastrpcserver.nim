@@ -5,7 +5,10 @@ import fastrpc/server/rpcmethods
 
 
 # Define RPC Server #
-rpcRegisterMethodsProc(name=initRpcExampleRouter):
+rpcRegisterMethodsProcArgs(
+        name=initRpcExampleRouter,
+        timerQueue: InetEventQueue[int64]
+        ):
 
   proc add(a: int, b: int): int {.rpc.} =
     result = 1 + a + b
@@ -41,12 +44,14 @@ rpcRegisterMethodsProc(name=initRpcExampleRouter):
 
     return Millis(t1-t0)
 
-  # proc microspub(count: int): int {.rpcPublisherThread().} =
-  #   # var subid = subs.subscribeWithThread(context, run_micros, % delay)
-  #   while true:
-  #     var ts = int(getMonoTime().ticks() div 1000)
-  #     discard rpcPublish(ts)
-  #     os.sleep(count)
+  proc microspub(): int {.rpcEventSubscriber(timerQueue).} =
+
+    # let ts = timerQueue.peek()
+    var ts: int64 = 0
+    if timerQueue.tryRecv(ts):
+      # let ts = timerQueue.recv()
+      echo "ts: ", 0
+    return ts
 
   # proc adcstream(count: int): seq[int] {.rpcPublisherThread().} =
   #   # var subid = subs.subscribeWithThread(context, run_micros, % delay)
@@ -66,14 +71,31 @@ rpcRegisterMethodsProc(name=initRpcExampleRouter):
       raise newException(ValueError, "wrong answer!")
     result = "correct: " & msg
 
+
+proc timePublisher*(params: (InetEventQueue[int64], int)) {.thread.} =
+  let 
+    queue = params[0]
+    delayMs = params[1]
+
+  while true:
+    var ts = int64(getMonoTime().ticks() div 1000)
+    queue.send(ts)
+    os.sleep(delayMs)
+
+
 when isMainModule:
   let inetAddrs = [
     newInetAddr("0.0.0.0", 5656, Protocol.IPPROTO_UDP),
     newInetAddr("0.0.0.0", 5656, Protocol.IPPROTO_TCP),
   ]
 
+  var timer1q = InetEventQueue[int64].init(10)
+  var timerThr: Thread[(InetEventQueue[int64], int)]
+  timerThr.createThread(timePublisher, (timer1q , 100))
+
   echo "running fast rpc example"
-  var router = initRpcExampleRouter()
+  var router = newFastRpcRouter()
+  initRpcExampleRouter(router, timerQueue=timer1q)
   for rpc in router.procs.keys():
     echo "  rpc: ", rpc
 
