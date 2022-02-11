@@ -45,8 +45,8 @@ proc createRpcRouter*(): FastRpcRouter =
 
 proc register*(router: var FastRpcRouter, path: string, evt: SelectEvent, call: FastRpcEventProc) =
   router.subNames[path] = evt
-  let cids = initHashSet[InetClientHandle]()
-  router.subEventProcs[evt] = RpcSubClients(eventProc: call, cids: cids)
+  let subs = initTable[InetClientHandle, RpcSubId]()
+  router.subEventProcs[evt] = RpcSubClients(eventProc: call, subs: subs)
   echo "registering:sub: ", path
 
 proc register*(router: var FastRpcRouter, path: string, call: FastRpcProc) =
@@ -136,6 +136,11 @@ proc callMethod*(
                     req.procName & " raised an exception",
                     err, 
                     router.stacktraces)
+ 
+template packResponse*(res: FastRpcResponse, size: int): QMsgBuffer =
+  var so = newUniquePtr(MsgBuffer.init(size))
+  so[].pack(res)
+  so
 
 proc callMethod*(router: FastRpcRouter,
                  buffer: MsgBuffer,
@@ -145,7 +150,5 @@ proc callMethod*(router: FastRpcRouter,
   var req: FastRpcRequest
   buffer.unpack(req)
   var res: FastRpcResponse = router.callMethod(req, clientId)
-  var so = newUniquePtr(MsgBuffer.init(res.result.buf.data.len() + sizeof(res)))
-  so[].pack(res)
-  return so
+  return res.packResponse(res.result.buf.data.len() + sizeof(res))
   

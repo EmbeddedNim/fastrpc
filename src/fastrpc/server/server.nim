@@ -60,15 +60,17 @@ proc fastRpcEventHandler*(
       logDebug("fastRpcEventHandler:regQueue:cid: ", repr item.cid)
       let
         cid = item.cid
-        # subId = item.data[0]
+        subId = item.data[0]
         evt = item.data[1]
-      router.subEventProcs[evt].cids.incl(cid)
+      router.subEventProcs[evt].subs[cid] = subId
   elif evt in router.subEventProcs:
     logDebug("fastRpcEventHandler:subEventProcs: ", repr(evt))
-    let eventProc = router.subEventProcs[evt].eventProc
-    let msg: FastRpcParamsBuffer = eventProc()
-    for cid in router.subEventProcs[evt].cids:
-      var qmsg = newQMsgBuffer(msg.buf.data, 0)
+    let subClient = router.subEventProcs[evt]
+    let msg: FastRpcParamsBuffer = subClient.eventProc()
+    for cid, subid in subClient.subs:
+      let resp: FastRpcResponse =
+        wrapResponse(subid.FastRpcId, msg, kind=Publish)
+      var qmsg = resp.packResponse(msg.buf.data.len())
       discard router.outQueue.trySendMsg(cid, qmsg)
   else:
     raise newException(ValueError, "unknown queue event: " & repr(evt))
