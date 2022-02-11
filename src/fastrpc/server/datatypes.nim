@@ -48,7 +48,7 @@ type
 
   RpcSubClients* = object
     eventProc*: FastRpcEventProc
-    subs*: Table[InetClientHandle, RpcSubId]
+    subs*: TableRef[InetClientHandle, RpcSubId]
 
   FastRpcRouter* = ref object
     procs*: Table[string, FastRpcProc]

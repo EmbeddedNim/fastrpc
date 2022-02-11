@@ -45,7 +45,7 @@ proc createRpcRouter*(): FastRpcRouter =
 
 proc register*(router: var FastRpcRouter, path: string, evt: SelectEvent, call: FastRpcEventProc) =
   router.subNames[path] = evt
-  let subs = initTable[InetClientHandle, RpcSubId]()
+  let subs = newTable[InetClientHandle, RpcSubId]()
   router.subEventProcs[evt] = RpcSubClients(eventProc: call, subs: subs)
   echo "registering:sub: ", path
 

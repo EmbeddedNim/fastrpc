@@ -79,7 +79,7 @@ when isMainModule:
 
   var timer1q = InetEventQueue[int64].init(10)
   var timerThr: Thread[(InetEventQueue[int64], int)]
-  timerThr.createThread(timePublisher, (timer1q , 1_000))
+  timerThr.createThread(timePublisher, (timer1q , 4_000))
 
   echo "running fast rpc example"
   var router = newFastRpcRouter()

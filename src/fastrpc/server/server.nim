@@ -149,9 +149,21 @@ proc postServerProcessor(srv: ServerInfo[FastRpcOpts], results: seq[ReadyKey]) =
     logDebug("fastrpcProcessor:processed:sent:res: ", repr(res))
   
   for evt, subcli in router.subEventProcs.pairs():
+    var removes = newSeq[InetClientHandle]()
     for cid, subid in subcli.subs:
       logInfo("fastrpcProcessor:processed:cleanup:", repr(subid), "cid:", cid)
-
+      var found = false
+      for recFd, sock in srv.receivers:
+        echo "recFd: ", repr recFd
+        if recFd in cid:
+          logInfo("fastrpcProcessor:processed:cleanup:found:", repr(subid), "cid:", cid, "recFd:", recFd.int)
+          found = true
+          break
+      if not found:
+        logInfo("FASTRPCPROCESSOR:processed:cleanup:not:found:", repr(subid), "cid:", cid)
+        removes.add cid
+    for cid in removes:
+      subcli.subs.del(cid)
 
 
 ## =================== Fast RPC Server Implementation =================== ##
