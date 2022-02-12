@@ -1,4 +1,4 @@
-import tables, strutils, macros, os
+import tables, strutils, macros
 
 import mcu_utils/basictypes
 import mcu_utils/msgbuffer
