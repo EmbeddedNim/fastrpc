@@ -7,6 +7,7 @@ import posix
 # export net, selectors, tables, posix
 
 import mcu_utils/logging
+import mcu_utils/allocastats
 import mcu_utils/inettypes
 
 import servertypes
@@ -151,20 +152,21 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
   var srv = newServerInfo[T](serverImpl, select, listners, receivers)
 
   while true:
-    var keys: seq[ReadyKey] = select.select(-1)
-    logDebug "[SocketServer]::", "keys:", repr(keys)
-  
-    for key in keys:
-      logDebug "[SocketServer]::", "key:", repr(key)
-      if Event.Read in key.events:
-          srv.processReads(key)
-      if Event.User in key.events:
-          srv.processEvents(key)
-      if Event.Write in key.events:
-          srv.processWrites(key)
+    logAllocStats(lvlInfo):
+      var keys: seq[ReadyKey] = select.select(-1)
+      logDebug "[SocketServer]::", "keys:", repr(keys)
     
-    if serverImpl.postProcessHandler != nil:
-      serverImpl.postProcessHandler(srv, keys)
+      for key in keys:
+        logDebug "[SocketServer]::", "key:", repr(key)
+        if Event.Read in key.events:
+            srv.processReads(key)
+        if Event.User in key.events:
+            srv.processEvents(key)
+        if Event.Write in key.events:
+            srv.processWrites(key)
+      
+      if serverImpl.postProcessHandler != nil:
+        serverImpl.postProcessHandler(srv, keys)
 
   
   select.close()
