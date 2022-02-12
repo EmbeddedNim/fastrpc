@@ -122,7 +122,7 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
       protocol=ia.protocol,
       buffered = false
     )
-    logDebug "[SocketServer]::", "socket started:", "fd:", socket.getFd().int
+    logDebug "[SocketServer]::", "started:", "fd:", socket.getFd().int
 
     socket.setSockOpt(OptReuseAddr, true)
     socket .getFd().setBlocking(false)
