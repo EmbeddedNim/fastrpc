@@ -41,7 +41,7 @@ type
   FastRpcBindError* = object of ValueError
   FastRpcAddressUnresolvableError* = object of ValueError
 
-  RpcSubId* = int64
+  RpcSubId* = int32
   RpcSubIdQueue* = InetEventQueue[InetQueueItem[(RpcSubId, SelectEvent)]]
 
   FastRpcEventProc* = proc(): FastRpcParamsBuffer {.gcsafe, closure.}
