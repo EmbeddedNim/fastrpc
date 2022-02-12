@@ -36,7 +36,7 @@ type
                       context: RpcContext
                       ): FastRpcParamsBuffer {.gcsafe, nimcall.}
 
-  FastRpcRegisterCalls* = proc(router: var FastRpcRouter)
+  RpcRegistrationProc* = proc(router: var FastRpcRouter)
 
   FastRpcBindError* = object of ValueError
   FastRpcAddressUnresolvableError* = object of ValueError

@@ -5,10 +5,10 @@ import fastrpc/server/rpcmethods
 
 
 # Define RPC Server #
-rpcRegisterMethodsProcArgs(
-        name=initRpcExampleRouter,
-        timerQueue: InetEventQueue[int64]
-        ):
+proc registerExampleRpcMethods(
+          routers: var FastRpcRouter,
+          timerQueue: InetEventQueue[int64]
+        ) {.rpcRegistrationProc.} =
 
   proc add(a: int, b: int): int {.rpc.} =
     result = 1 + a + b
@@ -83,7 +83,7 @@ when isMainModule:
 
   echo "running fast rpc example"
   var router = newFastRpcRouter()
-  initRpcExampleRouter(router, timerQueue=timer1q)
+  router.registerExampleRpcMethods(timerQueue=timer1q)
   for rpc in router.procs.keys():
     echo "  rpc: ", rpc
 

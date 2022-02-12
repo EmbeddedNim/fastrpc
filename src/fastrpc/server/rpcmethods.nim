@@ -19,6 +19,15 @@ proc hasReturnType(params: NimNode): bool =
      params[0].kind != nnkEmpty:
     result = true
 
+proc firstArgument(params: NimNode): (string, string) =
+  if params != nil and
+      params.len > 0 and
+      params[1] != nil and
+      params[1].kind == nnkIdentDefs:
+    result = (params[1][0].strVal, params[1][1].repr)
+  else:
+    result = ("", "")
+
 iterator paramsIter(params: NimNode): tuple[name, ntype: NimNode] =
   for i in 1 ..< params.len:
     let arg = params[i]
@@ -80,12 +89,6 @@ macro rpcImpl*(p: untyped, publish: untyped, qarg: untyped): untyped =
   ## format (msgpack) and output parameters are automatically marshalled
   ## back to the fast rpc binary format (msgpack) for transport.
   
-  # if publish.kind != nnkNilLit:
-    # echo "RPC: pub: tp: ", typeof publish
-    # echo "RPC: pub: kd: ", publish.kind
-    # echo "RPC: pub: ", repr publish
-    # echo "RPC: ", p.treeRepr
-    
   let
     path = $p[0]
     params = p[3]
@@ -120,12 +123,6 @@ macro rpcImpl*(p: untyped, publish: untyped, qarg: untyped): untyped =
     paramSetups = mkParamsVars(paramsIdent, paramTypeName, parameters)
     paramTypes = mkParamsType(paramsIdent, paramTypeName, parameters)
     procBody = if body.kind == nnkStmtList: body else: body.body
-
-  # set the "context" variable type and the return types
-  # echo "PUBTHEAD: ", pubthread 
-
-  # let ContextType = if syspragma.isNil: ident "RpcContext"
-                    # else: ident "RpcSystemContext"
 
   let ContextType = ident "RpcContext"
   let ReturnType = if parameters.hasReturnType:
@@ -176,10 +173,6 @@ macro rpcImpl*(p: untyped, publish: untyped, qarg: untyped): untyped =
 
       register(router, `path`, `qarg`.evt, `rpcMethod`)
 
-
-  # Register rpc wrapper
-  # echo "RPC:RESULT: ", result.repr()
-
 template rpc*(p: untyped): untyped =
   rpcImpl(p, nil, nil)
 
@@ -189,111 +182,13 @@ template rpcPublisher*(args: static[Millis], p: untyped): untyped =
 template rpcEventSubscriber*(qarg: typed, p: untyped): untyped =
   rpcImpl(p, "thread", qarg)
 
-# proc addStandardSyscalls*(router: var FastRpcRouter) =
-
-#   proc listall(): JsonNode {.rpc, system.} =
-#     let names = context.router.listMethods()
-#     let sysnames = context.router.listSysMethods()
-#     result = %* {"methods": names, "system": sysnames}
-
-template rpcRegisterMethodsProc*(name, blk: untyped): untyped =
-  ## Template to generate a proc called `procName`. This proc
-  ## configures and returns an RPC router.
-  ## 
-  ## The returned RPC router will have all the proc's
-  ## registered from the passed in code block that are
-  ## tagged with the `rpc` pragma. 
-  ## 
-  ## For example:
-  ## .. code-block:: nim
-  ##    rpcRegisterMethodsProc(name=initMyExampleRouter):
-  ## 
-  ##      proc add(a: int, b: int): int {.rpc, system.} =
-  ##        result = 1 + a + b
-  ## 
-  ##      proc addAll(vals: seq[int]): int {.rpc.} =
-  ##        for val in vals:
-  ##          result = result + val
-  ## 
-  ##    # Create a new router using our proc generated above:
-  ##    var router = initMyExampleRouter()
-  ## 
-  ##    # This will list out `add` and `addAll`:
-  ##    for rpc in router.procs.keys():
-  ##      echo "  rpc: ", rpc
-  ## 
-  ##    # Start a socker server
-  ##    let inetAddrs = [newInetAddr("0.0.0.0", 5656, Protocol.IPPROTO_TCP), ]
-  ##    startSocketServer(inetAddrs, newFastRpcServer(router, prefixMsgSize=true))
-  ##    ```
-  ## 
-  ## An alternative usage is to pass an existing router 
-  ## as an argument. The RPC methods will be registerd 
-  ## on this passed in router instead.
-  ## 
-  ## Example usage of appending RPC methods to a router:
-  ## .. code-block:: nim
-  ##    # Create some new RPC Router
-  ##    var router = mainRpcRouterExample()
-  ## 
-  ##    # call our previous init router proc to register methods 
-  ##    router.initMyExampleRouter()
-  ## 
-  ##    # This will print out all methods from
-  ##    # `mainRpcRouterExample` and `initMyExampleRouter`
-  ##    for rpc in router.procs.keys():
-  ##      echo "  rpc: ", rperror
-  ## 
-  ##    # Start a socker server
-  ##    let inetAddrs = [newInetAddr("0.0.0.0", 5656, Protocol.IPPROTO_TCP), ]
-  ##    startSocketServer(inetAddrs, newFastRpcServer(router, prefixMsgSize=true))
-  ##    ```
-  
-  proc `name`*(router {.inject.}: var FastRpcRouter  ) =
-    ## Proc that registers all the methods in the `blk`
-    blk
-    # router.addStandardSysCalls()
-
-  proc `name`*(): FastRpcRouter =
-    ## convenience function to create a new router and init it
-    result = newFastRpcRouter()
-    `name`(result)
-
-macro rpcRegisterMethodsProcArgs*(name: untyped, args: varargs[untyped]): untyped =
-
-  assert args.len() >= 2
-  let
-    params = args[0..^2]
-    body = args[^1]
-    path = name
-
-  result = newStmtList()
-  let
-    # router names
-    pathStr = $path
-    procNameStr = pathStr.makeProcName()
-    # public rpc proc
-    procName = ident(procNameStr)
-    rname = ident("router")
-
-  # Create the proc's that hold the users code 
-  var procAst = quote do:
-    proc `procName`*(`rname`: var FastRpcRouter) =
-      `body`
-  
-  var procParams = procAst[3]
-  for param in params:
-    # echo "param: ", param.treeRepr
-    procParams.add(newIdentDefs(param[0], param[1]))
-
-  result.add procAst
-  # echo "ROUTER:INITPROC:ARGS: ", parameters.treeRepr
-  # echo "ROUTER:INITPROC: ", result.treeRepr
-  echo "ROUTER:RESULT: ", result.repr()
-
-template rpc_methods*(procName, blk: untyped): untyped {.
-    deprecated: "use `rpcRegisterMethodsProc` instead".} =
-  rpcRegisterMethodsProc(procName, blk)
+macro rpcRegistrationProc*(p: untyped): untyped =
+  let firstArg = p[3].firstArgument()
+  if firstArg[0] != "router" or firstArg[1] != "var FastRpc":
+    error("Incorrect definition for a `rpcRegistrationProc`." &
+    "The first parameter to an rpc registration proc must be named `router` and be of type `var FastRpcRouter`." &
+    " Instead got: `" & repr(firstArg) & "`")
+  result = p
 
 proc rpcReply*[T](context: RpcContext, value: T, kind: FastRpcType): bool =
   ## TODO: FIXME
