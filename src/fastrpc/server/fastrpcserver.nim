@@ -161,7 +161,7 @@ proc postServerProcessor(srv: ServerInfo[FastRpcOpts], results: seq[ReadyKey]) =
         removes.add cid
     for cid in removes:
       subcli.subs.del(cid)
-    logInfo("fastrpcprocessor:cleanup:subs:len:", subcli.subs.len())
+    logDebug("fastrpcprocessor:cleanup:subs:len:", subcli.subs.len())
 
 
 ## =================== Fast RPC Server Implementation =================== ##
