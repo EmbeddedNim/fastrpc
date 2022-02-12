@@ -1,6 +1,6 @@
 import std/monotimes, std/os
 
-import fastrpc/server/server
+import fastrpc/server/fastrpcserver
 import fastrpc/server/rpcmethods
 
 import json

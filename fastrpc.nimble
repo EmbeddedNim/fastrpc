@@ -17,7 +17,7 @@ requires "threading >= 0.1.0"
 requires "https://github.com/EmbeddedNim/mcu_utils.git#main"
 
 task build_integration_tests, "build integration test tools":
-  exec "nim c tests/integration/fastrpcserver.nim"
+  exec "nim c tests/integration/fastrpcserverExample.nim"
   exec "nim c tests/integration/fastrpccli.nim"
   exec "nim c tests/integration/rpcmpackpubsubserver.nim"
   # exec "nim c tests/integration/rpcmpackserver.nim"

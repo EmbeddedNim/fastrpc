@@ -152,7 +152,7 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
   var srv = newServerInfo[T](serverImpl, select, listners, receivers)
 
   while true:
-    logAllocStats(lvlDebug):
+    logAllocStats(lvlInfo):
       var keys: seq[ReadyKey] = select.select(-1)
       logDebug "[SocketServer]::", "keys:", repr(keys)
     
