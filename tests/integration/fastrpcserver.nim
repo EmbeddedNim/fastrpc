@@ -6,7 +6,7 @@ import fastrpc/server/rpcmethods
 
 # Define RPC Server #
 proc registerExampleRpcMethods(
-          routers: var FastRpcRouter,
+          router: var FastRpcRouter,
           timerQueue: InetEventQueue[int64]
         ) {.rpcRegistrationProc.} =
 

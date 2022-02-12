@@ -184,7 +184,7 @@ template rpcEventSubscriber*(qarg: typed, p: untyped): untyped =
 
 macro rpcRegistrationProc*(p: untyped): untyped =
   let firstArg = p[3].firstArgument()
-  if firstArg[0] != "router" or firstArg[1] != "var FastRpc":
+  if firstArg[0] != "router" or firstArg[1] != "var FastRpcRouter":
     error("Incorrect definition for a `rpcRegistrationProc`." &
     "The first parameter to an rpc registration proc must be named `router` and be of type `var FastRpcRouter`." &
     " Instead got: `" & repr(firstArg) & "`")
