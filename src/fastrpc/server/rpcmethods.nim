@@ -175,9 +175,12 @@ macro rpcImpl*(p: untyped, publish: untyped, qarg: untyped): untyped =
 
       register(router, `path`, `qarg`.evt, `rpcMethod`)
 
-template rpcSetter*(p: untyped): untyped =
+macro rpcOption*(p: untyped): untyped =
   result = p
-template rpcGetter*(p: untyped): untyped =
+
+macro rpcSetter*(p: untyped): untyped =
+  result = p
+macro rpcGetter*(p: untyped): untyped =
   result = p
 
 template rpc*(p: untyped): untyped =
