@@ -85,7 +85,7 @@ proc timeSerializer(queue: TimerDataQueue): Table[string, seq[int64]] {.rpcSeria
     echo "ts: ", tvals
   {"ts": tvals}.toTable()
 
-proc timeSampler*(queue: TimerDataQueue, opts: TimerOptionsRpc) {.rpcThread.} =
+proc timeSampler*(queue: TimerDataQueue, opts: RpcOption[TimerOptions]) {.rpcThread.} =
   ## Thread example that runs the as a time publisher. This is a reducer
   ## that gathers time samples and outputs arrays of timestamp samples.
   var delayMs = opts.data.delay.int
