@@ -53,6 +53,7 @@ type
   TimerDataQueue = InetEventQueue[seq[int64]]
   TimerOptions = object
     delay: Millis
+    count: int
 
 DefineRpcOptions[TimerOptions](name=timerOptionsRpcs):
 
@@ -73,7 +74,7 @@ DefineRpcOptions[TimerOptions](name=timerOptionsRpcs):
     result = option.delayMs
   
 
-proc timeSerializer(queue: TimerDataQueue): Table[string, seq[int64]] {.rpcSerializer.} =
+proc timeSerializer(queue: TimerDataQueue): Table[string, seq[int64]] {.rpcSerialize.} =
   ## called by the socket server every time there's data
   ## on the queue argument given the `rpcEventSubscriber`.
   ## 
@@ -82,18 +83,12 @@ proc timeSerializer(queue: TimerDataQueue): Table[string, seq[int64]] {.rpcSeria
     echo "ts: ", tvals
   {"ts": tvals}.toTable()
 
-var adcDriver: AdcDriverObj
-
-proc timeSamplerReducer*(params: (TimerDataQueue [seq[int64]], TimerOptions)) {.thread.} =
+proc timeSampler*(queue: TimerDataQueue, optsChan: Chan[TimerOptions]) {.rpcThread.} =
   ## Thread example that runs the as a time publisher. This is a reducer
   ## that gathers time samples and outputs arrays of timestamp samples.
-  let 
-    queue = params[0]
-    option = params[1]
-    n = 10
-
-  adcDriver.setupISR()
-
+  var opts = optsChan.get()
+  var delayMs = opts.delay.int
+  var n = opts.count
 
   while true:
     var tvals = newSeqOfCap[int64](n)
@@ -104,8 +99,12 @@ proc timeSamplerReducer*(params: (TimerDataQueue [seq[int64]], TimerOptions)) {.
 
     logInfo "timePublisher: ", "ts:", tvals[^1], "queue:len:", queue.chan.peek()
     var qvals = isolate tvals
-    if option.isUpdated:
-      adc1.resetCSPeed()
+
+    let newOpts = optsChan.getUpdate()
+    if newOpts.isSome:
+      echo "setting new parameters: ", repr(newOpts)
+      delayMs = newOpts.get().delay.int
+      n = newOpts.get().count
 
     discard queue.trySend(qvals)
     os.sleep(delayMs)
@@ -117,18 +116,17 @@ when isMainModule:
     newInetAddr("0.0.0.0", 5656, Protocol.IPPROTO_TCP),
   ]
 
+  # var timerThr: Thread[(InetEventQueue[seq[int64]], int)]
+  # timerThr.createThread(timeSamplerReducer, (timer1q , 1_000))
+
   var timer1q = InetEventQueue[seq[int64]].init(10)
-  var timerThr: Thread[(InetEventQueue[seq[int64]], int)]
-  timerThr.createThread(timeSamplerReducer, (timer1q , 1_000))
 
   echo "running fast rpc example"
   var router = newFastRpcRouter()
   router.registerRpcs(exampleRpcs)
-  router.registerRpcs(exampleRpcSubscription,
-                           timerQueue=timer1q)
   router.registerDatastream("ADC1",
-                            serializer=ADC1serializer,
-                            reducer=ADC1reducer, 
+                            serializer=timeSerializer,
+                            reducer=timeSampler, 
                             queue = timer1q,
                             option = TimerOptions(delay: 100.Millis),
                             optionRpcs = timerOptionsRpcs,

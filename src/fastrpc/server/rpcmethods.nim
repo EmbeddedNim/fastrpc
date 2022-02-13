@@ -1,9 +1,11 @@
 import tables, strutils, macros
+import options
 
 import mcu_utils/basictypes
 import mcu_utils/msgbuffer
 include mcu_utils/threads
 
+export options
 import datatypes
 export datatypes
 import router
@@ -184,9 +186,12 @@ template rpc*(p: untyped): untyped =
 template rpcPublisher*(args: static[Millis], p: untyped): untyped =
   rpcImpl(p, args, nil)
 
-macro rpcSerializer*[T](queue: InetEventQueue[T], p: untyped): untyped =
+template rpcThread*(p: untyped): untyped =
+  `p`
+
+macro rpcSerialize*(p: untyped): untyped =
   # rpcImpl(p, "thread", qarg)
-  # result = p
+  result = p
 
 macro DefineRpcs*(name: untyped, args: varargs[untyped]) =
   ## annotates that a proc is an `rpcRegistrationProc` and
@@ -213,21 +218,16 @@ macro DefineRpcs*(name: untyped, args: varargs[untyped]) =
     pArgs.add parg
   echo "PARGS: ", pArgs.treeRepr
 
-macro DefineRpcOptions*[T](name, router: untyped, args: varargs[untyped]) =
-  return newStmtList()
+macro DefineRpcOptions*[T](name: untyped, args: varargs[untyped]) =
   ## annotates that a proc is an `rpcRegistrationProc` and
   ## that it takes the correct arguments. In particular 
   ## the first parameter must be `router: var FastRpcRouter`. 
   ## 
   let
-    params = if args.len() >= 2: args[0..^2]
+    params = if args.len() >= 1: args[0..^2]
              else: newSeq[NimNode]()
     pbody = args[^1]
 
-  if router.repr != "var FastRpcRouter":
-    error("Incorrect definition for a `rpcNamespace`." &
-    "The first parameter to an rpc registration namespace must be named `router` and be of type `var FastRpcRouter`." &
-    " Instead got: `" & treeRepr(router) & "`")
   let rname = ident("router")
   result = quote do:
     proc `name`(`rname`: var FastRpcRouter) =
@@ -239,7 +239,7 @@ macro DefineRpcOptions*[T](name, router: untyped, args: varargs[untyped]) =
     pArgs.add parg
   echo "PARGS: ", pArgs.treeRepr
 
-macro registerNamespace*(router: var FastRpcRouter, namespace: typed, args: varargs[untyped]) =
+macro registerRpcs*(router: var FastRpcRouter, namespace: typed, args: varargs[untyped]) =
   echo "registerNamespace:name: ", treeRepr namespace
   echo "registerNamespace:ARGS: ", treeRepr args
   if args.len() > 0:
@@ -249,6 +249,26 @@ macro registerNamespace*(router: var FastRpcRouter, namespace: typed, args: vara
     result = quote do:
       `namespace`(router)
   echo "registerNamespace:RES: ", treeRepr result
+
+macro registerDatastream*(router: var FastRpcRouter,
+                          namespace: typed,
+                          args: varargs[untyped]) =
+  echo "registerNamespace:name: ", treeRepr namespace
+  echo "registerNamespace:ARGS: ", treeRepr args
+  if args.len() > 0:
+    result = quote do:
+      `namespace`(router, `args`)
+  else:
+    result = quote do:
+      `namespace`(router)
+  echo "registerNamespace:RES: ", treeRepr result
+
+proc getUpdate*[T](chan: Chan[T]): Option[T] =
+  # chan.tryRecv()
+  return some(T())
+proc get*[T](chan: Chan[T]): T =
+  # chan.tryRecv()
+  return T()
 
 
 proc rpcReply*[T](context: RpcContext, value: T, kind: FastRpcType): bool =
