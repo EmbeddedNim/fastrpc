@@ -6,10 +6,10 @@ import fastrpc/server/rpcmethods
 import json
 
 # Define RPC Server #
-proc registerExampleRpcMethods(
-          router: var FastRpcRouter,
-          timerQueue: InetEventQueue[seq[int64]]
-        ) {.rpcRegistrationProc.} =
+createRpcNamespace(
+          name = exampleRpcs,
+          router = var FastRpcRouter,
+        ):
 
   proc add(a: int, b: int): int {.rpc.} =
     result = 1 + a + b
@@ -45,6 +45,19 @@ proc registerExampleRpcMethods(
 
     return Millis(t1-t0)
 
+
+  proc testerror(msg: string): string {.rpc.} =
+    echo("test error: ", "what is your favorite color?")
+    if msg != "Blue":
+      raise newException(ValueError, "wrong answer!")
+    result = "correct: " & msg
+
+createRpcSubscriptionNamespace(
+          name = exampleRpcSubscription,
+          router = var FastRpcRouter,
+          timerQueue = InetEventQueue[seq[int64]]
+        ):
+
   proc microspub(): JsonNode {.rpcEventSubscriber(timerQueue).} =
     ## called by the socket server every time there's data
     ## on the queue argument given the `rpcEventSubscriber`.
@@ -54,14 +67,10 @@ proc registerExampleRpcMethods(
       echo "ts: ", tvals
     %* {"ts": tvals}
 
-  proc testerror(msg: string): string {.rpc.} =
-    echo("test error: ", "what is your favorite color?")
-    if msg != "Blue":
-      raise newException(ValueError, "wrong answer!")
-    result = "correct: " & msg
-
 
 proc timePublisher*(params: (InetEventQueue[seq[int64]], int)) {.thread.} =
+  ## Thread example that runs the as a time publisher. This is a reducer
+  ## that gathers time samples and outputs arrays of timestamp samples.
   let 
     queue = params[0]
     delayMs = params[1]
@@ -92,7 +101,8 @@ when isMainModule:
 
   echo "running fast rpc example"
   var router = newFastRpcRouter()
-  router.registerExampleRpcMethods(timerQueue=timer1q)
+  router.registerNamespace(exampleRpcs)
+  router.registerNamespace(exampleRpcSubscription, timerQueue=timer1q)
   for rpc in router.procs.keys():
     echo "  rpc: ", rpc
 

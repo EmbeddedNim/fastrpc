@@ -182,17 +182,67 @@ template rpcPublisher*(args: static[Millis], p: untyped): untyped =
 template rpcEventSubscriber*(qarg: typed, p: untyped): untyped =
   rpcImpl(p, "thread", qarg)
 
-macro rpcRegistrationProc*(pbody: untyped): untyped =
+macro createRpcNamespace*(name, router: untyped, args: varargs[untyped]) =
   ## annotates that a proc is an `rpcRegistrationProc` and
   ## that it takes the correct arguments. In particular 
   ## the first parameter must be `router: var FastRpcRouter`. 
   ## 
-  let firstArg = pbody[3].firstArgument()
-  if firstArg[0] != "router" or firstArg[1] != "var FastRpcRouter":
-    error("Incorrect definition for a `rpcRegistrationProc`." &
-    "The first parameter to an rpc registration proc must be named `router` and be of type `var FastRpcRouter`." &
-    " Instead got: `" & repr(firstArg) & "`")
-  result = pbody
+  let
+    params = if args.len() >= 2: args[0..^2]
+             else: newSeq[NimNode]()
+    pbody = args[^1]
+
+  if router.repr != "var FastRpcRouter":
+    error("Incorrect definition for a `rpcNamespace`." &
+    "The first parameter to an rpc registration namespace must be named `router` and be of type `var FastRpcRouter`." &
+    " Instead got: `" & treeRepr(router) & "`")
+  let rname = ident("router")
+  result = quote do:
+    proc `name`(`rname`: var FastRpcRouter) =
+      `pbody`
+  
+  var pArgs = result[3]
+  for param in params:
+    let parg = newIdentDefs(param[0], param[1])
+    pArgs.add parg
+  echo "PARGS: ", pArgs.treeRepr
+
+macro createRpcSubscriptionNamespace*(name, router: untyped, args: varargs[untyped]) =
+  ## annotates that a proc is an `rpcRegistrationProc` and
+  ## that it takes the correct arguments. In particular 
+  ## the first parameter must be `router: var FastRpcRouter`. 
+  ## 
+  let
+    params = if args.len() >= 2: args[0..^2]
+             else: newSeq[NimNode]()
+    pbody = args[^1]
+
+  if router.repr != "var FastRpcRouter":
+    error("Incorrect definition for a `rpcNamespace`." &
+    "The first parameter to an rpc registration namespace must be named `router` and be of type `var FastRpcRouter`." &
+    " Instead got: `" & treeRepr(router) & "`")
+  let rname = ident("router")
+  result = quote do:
+    proc `name`(`rname`: var FastRpcRouter) =
+      `pbody`
+  
+  var pArgs = result[3]
+  for param in params:
+    let parg = newIdentDefs(param[0], param[1])
+    pArgs.add parg
+  echo "PARGS: ", pArgs.treeRepr
+
+macro registerNamespace*(router: var FastRpcRouter, namespace: typed, args: varargs[untyped]) =
+  echo "registerNamespace:name: ", treeRepr namespace
+  echo "registerNamespace:ARGS: ", treeRepr args
+  if args.len() > 0:
+    result = quote do:
+      `namespace`(router, `args`)
+  else:
+    result = quote do:
+      `namespace`(router)
+  echo "registerNamespace:RES: ", treeRepr result
+
 
 proc rpcReply*[T](context: RpcContext, value: T, kind: FastRpcType): bool =
   ## TODO: FIXME
