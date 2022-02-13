@@ -55,8 +55,6 @@ type
     delay: Millis
     count: int
 
-  TimerOptionsRpc = RpcOption[TimerOptions]
-
 DefineRpcOptions[TimerOptions](name=timerOptionsRpcs):
 
   proc setDelay(opt: var TimerOptions, delayMs: int): bool {.rpcSetter.} =
@@ -76,7 +74,7 @@ DefineRpcOptions[TimerOptions](name=timerOptionsRpcs):
     result = option.delay.int
   
 
-proc timeSerializer(queue: TimerDataQueue): Table[string, seq[int64]] {.rpcSerialize.} =
+proc timeSerializer(queue: TimerDataQueue): Table[string, seq[int64]] {.rpcSerializer.} =
   ## called by the socket server every time there's data
   ## on the queue argument given the `rpcEventSubscriber`.
   ## 

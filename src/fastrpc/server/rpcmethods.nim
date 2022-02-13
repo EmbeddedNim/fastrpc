@@ -192,7 +192,7 @@ template rpcPublisher*(args: static[Millis], p: untyped): untyped =
 template rpcThread*(p: untyped): untyped =
   `p`
 
-macro rpcSerialize*(p: untyped): untyped =
+macro rpcSerializer*(p: untyped): untyped =
   # rpcImpl(p, "thread", qarg)
   result = p
 
