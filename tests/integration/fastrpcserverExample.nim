@@ -6,7 +6,7 @@ import fastrpc/server/rpcmethods
 import json
 
 # Define RPC Server #
-createRpcNamespace(
+DefineRpcNamespace(
           name = exampleRpcs,
           router = var FastRpcRouter,
         ):
@@ -52,7 +52,8 @@ createRpcNamespace(
       raise newException(ValueError, "wrong answer!")
     result = "correct: " & msg
 
-createRpcSubscriptionNamespace(
+
+DefineRpcSubscriptionNamespace(
           name = exampleRpcSubscription,
           router = var FastRpcRouter,
           timerQueue = InetEventQueue[seq[int64]]
@@ -68,7 +69,7 @@ createRpcSubscriptionNamespace(
     %* {"ts": tvals}
 
 
-proc timePublisher*(params: (InetEventQueue[seq[int64]], int)) {.thread.} =
+proc timeSamplerReducer*(params: (InetEventQueue[seq[int64]], int)) {.thread.} =
   ## Thread example that runs the as a time publisher. This is a reducer
   ## that gathers time samples and outputs arrays of timestamp samples.
   let 
@@ -97,7 +98,7 @@ when isMainModule:
 
   var timer1q = InetEventQueue[seq[int64]].init(10)
   var timerThr: Thread[(InetEventQueue[seq[int64]], int)]
-  timerThr.createThread(timePublisher, (timer1q , 1_000))
+  timerThr.createThread(timeSamplerReducer, (timer1q , 1_000))
 
   echo "running fast rpc example"
   var router = newFastRpcRouter()

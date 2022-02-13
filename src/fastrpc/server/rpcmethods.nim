@@ -182,7 +182,7 @@ template rpcPublisher*(args: static[Millis], p: untyped): untyped =
 template rpcEventSubscriber*(qarg: typed, p: untyped): untyped =
   rpcImpl(p, "thread", qarg)
 
-macro createRpcNamespace*(name, router: untyped, args: varargs[untyped]) =
+macro DefineRpcNamespace*(name, router: untyped, args: varargs[untyped]) =
   ## annotates that a proc is an `rpcRegistrationProc` and
   ## that it takes the correct arguments. In particular 
   ## the first parameter must be `router: var FastRpcRouter`. 
@@ -207,7 +207,7 @@ macro createRpcNamespace*(name, router: untyped, args: varargs[untyped]) =
     pArgs.add parg
   echo "PARGS: ", pArgs.treeRepr
 
-macro createRpcSubscriptionNamespace*(name, router: untyped, args: varargs[untyped]) =
+macro DefineRpcSubscriptionNamespace*(name, router: untyped, args: varargs[untyped]) =
   ## annotates that a proc is an `rpcRegistrationProc` and
   ## that it takes the correct arguments. In particular 
   ## the first parameter must be `router: var FastRpcRouter`. 
