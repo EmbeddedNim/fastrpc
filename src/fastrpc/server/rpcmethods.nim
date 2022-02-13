@@ -221,6 +221,11 @@ macro DefineRpcs*(name: untyped, args: varargs[untyped]) =
     pArgs.add parg
   echo "PARGS: ", pArgs.treeRepr
 
+type
+  RpcOption*[T] = object
+    data*: T
+    ch*: Chan[T]
+
 macro DefineRpcOptions*[T](name: untyped, args: varargs[untyped]) =
   ## annotates that a proc is an `rpcRegistrationProc` and
   ## that it takes the correct arguments. In particular 
@@ -266,10 +271,10 @@ macro registerDatastream*(router: var FastRpcRouter,
       `namespace`(router)
   echo "registerNamespace:RES: ", treeRepr result
 
-proc getUpdate*[T](chan: Chan[T]): Option[T] =
+proc getUpdatedOption*[T](chan: RpcOption[T]): Option[T] =
   # chan.tryRecv()
   return some(T())
-proc get*[T](chan: Chan[T]): T =
+proc getRpcOption*[T](chan: RpcOption[T]): T =
   # chan.tryRecv()
   return T()
 

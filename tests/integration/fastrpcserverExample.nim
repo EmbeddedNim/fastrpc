@@ -55,6 +55,8 @@ type
     delay: Millis
     count: int
 
+  TimerOptionsRpc = RpcOption[TimerOptions]
+
 DefineRpcOptions[TimerOptions](name=timerOptionsRpcs):
 
   proc setDelay(opt: var TimerOptions, delayMs: int): bool {.rpcSetter.} =
@@ -83,12 +85,11 @@ proc timeSerializer(queue: TimerDataQueue): Table[string, seq[int64]] {.rpcSeria
     echo "ts: ", tvals
   {"ts": tvals}.toTable()
 
-proc timeSampler*(queue: TimerDataQueue, optsChan: Chan[TimerOptions]) {.rpcThread.} =
+proc timeSampler*(queue: TimerDataQueue, opts: TimerOptionsRpc) {.rpcThread.} =
   ## Thread example that runs the as a time publisher. This is a reducer
   ## that gathers time samples and outputs arrays of timestamp samples.
-  var opts = optsChan.get()
-  var delayMs = opts.delay.int
-  var n = opts.count
+  var delayMs = opts.data.delay.int
+  var n = opts.data.count
 
   while true:
     var tvals = newSeqOfCap[int64](n)
@@ -100,7 +101,7 @@ proc timeSampler*(queue: TimerDataQueue, optsChan: Chan[TimerOptions]) {.rpcThre
     logInfo "timePublisher: ", "ts:", tvals[^1], "queue:len:", queue.chan.peek()
     var qvals = isolate tvals
 
-    let newOpts = optsChan.getUpdate()
+    let newOpts = opts.getUpdatedOption()
     if newOpts.isSome:
       echo "setting new parameters: ", repr(newOpts)
       delayMs = newOpts.get().delay.int
