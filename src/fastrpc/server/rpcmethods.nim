@@ -173,16 +173,22 @@ macro rpcImpl*(p: untyped, publish: untyped, qarg: untyped): untyped =
 
       register(router, `path`, `qarg`.evt, `rpcMethod`)
 
+template rpcSetter*(p: untyped): untyped =
+  result = p
+template rpcGetter*(p: untyped): untyped =
+  result = p
+
 template rpc*(p: untyped): untyped =
   rpcImpl(p, nil, nil)
 
 template rpcPublisher*(args: static[Millis], p: untyped): untyped =
   rpcImpl(p, args, nil)
 
-template rpcEventSubscriber*(qarg: typed, p: untyped): untyped =
-  rpcImpl(p, "thread", qarg)
+macro rpcSerializer*[T](queue: InetEventQueue[T], p: untyped): untyped =
+  # rpcImpl(p, "thread", qarg)
+  # result = p
 
-macro DefineRpcNamespace*(name, router: untyped, args: varargs[untyped]) =
+macro DefineRpcs*(name: untyped, args: varargs[untyped]) =
   ## annotates that a proc is an `rpcRegistrationProc` and
   ## that it takes the correct arguments. In particular 
   ## the first parameter must be `router: var FastRpcRouter`. 
@@ -192,10 +198,10 @@ macro DefineRpcNamespace*(name, router: untyped, args: varargs[untyped]) =
              else: newSeq[NimNode]()
     pbody = args[^1]
 
-  if router.repr != "var FastRpcRouter":
-    error("Incorrect definition for a `rpcNamespace`." &
-    "The first parameter to an rpc registration namespace must be named `router` and be of type `var FastRpcRouter`." &
-    " Instead got: `" & treeRepr(router) & "`")
+  # if router.repr != "var FastRpcRouter":
+  #   error("Incorrect definition for a `rpcNamespace`." &
+  #   "The first parameter to an rpc registration namespace must be named `router` and be of type `var FastRpcRouter`." &
+  #   " Instead got: `" & treeRepr(router) & "`")
   let rname = ident("router")
   result = quote do:
     proc `name`(`rname`: var FastRpcRouter) =
@@ -207,7 +213,8 @@ macro DefineRpcNamespace*(name, router: untyped, args: varargs[untyped]) =
     pArgs.add parg
   echo "PARGS: ", pArgs.treeRepr
 
-macro DefineRpcSubscriptionNamespace*(name, router: untyped, args: varargs[untyped]) =
+macro DefineRpcOptions*[T](name, router: untyped, args: varargs[untyped]) =
+  return newStmtList()
   ## annotates that a proc is an `rpcRegistrationProc` and
   ## that it takes the correct arguments. In particular 
   ## the first parameter must be `router: var FastRpcRouter`. 

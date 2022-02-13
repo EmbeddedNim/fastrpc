@@ -6,10 +6,7 @@ import fastrpc/server/rpcmethods
 import json
 
 # Define RPC Server #
-DefineRpcNamespace(
-          name = exampleRpcs,
-          router = var FastRpcRouter,
-        ):
+DefineRpcs(name=exampleRpcs):
 
   proc add(a: int, b: int): int {.rpc.} =
     result = 1 + a + b
@@ -52,30 +49,51 @@ DefineRpcNamespace(
       raise newException(ValueError, "wrong answer!")
     result = "correct: " & msg
 
+type
+  TimerDataQueue = InetEventQueue[seq[int64]]
+  TimerOptions = object
+    delay: Millis
 
-DefineRpcSubscriptionNamespace(
-          name = exampleRpcSubscription,
-          router = var FastRpcRouter,
-          timerQueue = InetEventQueue[seq[int64]]
-        ):
+DefineRpcOptions[TimerOptions](name=timerOptionsRpcs):
 
-  proc microspub(): JsonNode {.rpcEventSubscriber(timerQueue).} =
+  proc setDelay(opt: var TimerOptions, delayMs: int): bool {.rpcSetter.} =
     ## called by the socket server every time there's data
     ## on the queue argument given the `rpcEventSubscriber`.
     ## 
-    var tvals: seq[int64]
-    if timerQueue.tryRecv(tvals):
-      echo "ts: ", tvals
-    %* {"ts": tvals}
+    if delayMs < 10_000:
+      opt.delay = Millis(delayMs)
+      return true
+    else:
+      return false
+  
+  proc getDelay(option: var TimerOptions): int {.rpcGetter.} =
+    ## called by the socket server every time there's data
+    ## on the queue argument given the `rpcEventSubscriber`.
+    ## 
+    result = option.delayMs
+  
 
+proc timeSerializer(queue: TimerDataQueue): Table[string, seq[int64]] {.rpcSerializer.} =
+  ## called by the socket server every time there's data
+  ## on the queue argument given the `rpcEventSubscriber`.
+  ## 
+  var tvals: seq[int64]
+  if queue.tryRecv(tvals):
+    echo "ts: ", tvals
+  {"ts": tvals}.toTable()
 
-proc timeSamplerReducer*(params: (InetEventQueue[seq[int64]], int)) {.thread.} =
+var adcDriver: AdcDriverObj
+
+proc timeSamplerReducer*(params: (TimerDataQueue [seq[int64]], TimerOptions)) {.thread.} =
   ## Thread example that runs the as a time publisher. This is a reducer
   ## that gathers time samples and outputs arrays of timestamp samples.
   let 
     queue = params[0]
-    delayMs = params[1]
+    option = params[1]
     n = 10
+
+  adcDriver.setupISR()
+
 
   while true:
     var tvals = newSeqOfCap[int64](n)
@@ -86,6 +104,9 @@ proc timeSamplerReducer*(params: (InetEventQueue[seq[int64]], int)) {.thread.} =
 
     logInfo "timePublisher: ", "ts:", tvals[^1], "queue:len:", queue.chan.peek()
     var qvals = isolate tvals
+    if option.isUpdated:
+      adc1.resetCSPeed()
+
     discard queue.trySend(qvals)
     os.sleep(delayMs)
 
@@ -102,8 +123,16 @@ when isMainModule:
 
   echo "running fast rpc example"
   var router = newFastRpcRouter()
-  router.registerNamespace(exampleRpcs)
-  router.registerNamespace(exampleRpcSubscription, timerQueue=timer1q)
+  router.registerRpcs(exampleRpcs)
+  router.registerRpcs(exampleRpcSubscription,
+                           timerQueue=timer1q)
+  router.registerDatastream("ADC1",
+                            serializer=ADC1serializer,
+                            reducer=ADC1reducer, 
+                            queue = timer1q,
+                            option = TimerOptions(delay: 100.Millis),
+                            optionRpcs = timerOptionsRpcs,
+                            )
   for rpc in router.procs.keys():
     echo "  rpc: ", rpc
 
