@@ -1,7 +1,6 @@
 import json, tables, strutils, macros, options
 import strformat
 import net, os
-import streams
 import times
 import stats
 import sequtils
@@ -16,8 +15,8 @@ from cligen/argcvt import ArgcvtParams, argKeys         # Little helpers
 import msgpack4nim
 import msgpack4nim/msgpack2json
 
-import fast_rpc/socketserver/common_handlers
-import fast_rpc/routers/protocol_frpc
+import ../server/protocol
+import ../servertypes
 
 enableTrueColors()
 proc print*(text: varargs[string]) =
@@ -44,6 +43,7 @@ type
     jsonArg: string
     ipAddr: IpAddress
     port: Port
+    noresults: bool
     prettyPrint: bool
     quiet: bool
     system: bool
@@ -76,7 +76,7 @@ template readResponse(): untyped =
   if msgLenBytes.len() == 0:
     print(colGray, "[socket read: 0, return]")
     return
-  var msgLen: int16 = msgLenBytes.lengthFromBigendian16()
+  var msgLen: int16 = msgLenBytes.fromStrBe16()
   if not opts.quiet and not opts.noprint:
     print(colGray, "[socket read:data:lenstr: " & repr(msgLenBytes) & "]")
     print(colGray, "[socket read:data:len: " & repr(msgLen) & "]")
@@ -108,7 +108,7 @@ template readResponse(): untyped =
 template prettyPrintResults(response: untyped): untyped = 
   var resbuf = MsgStream.init(response.result.buf.data)
   mnode = resbuf.toJsonNode()
-  if not opts.quiet and not opts.noprint:
+  if not opts.noprint and not opts.noresults:
     if opts.prettyPrint:
       print(colOrange, pretty(mnode))
     else:
@@ -128,7 +128,7 @@ proc execRpc( client: Socket, i: int, call: var FastRpcRequest, opts: RpcOptions
       resbuf.toJsonNode()
 
     timeBlock("call", opts):
-      let msz = mcall.len().int16.lengthBigendian16()
+      let msz = mcall.len().int16.toStrBe16()
       if not opts.quiet and not opts.noprint:
         print("[socket mcall bytes: " & repr(mcall.len()) & "]")
         print("[socket mcall bytes:lenprefix: " & repr msz & "]")
@@ -146,13 +146,13 @@ proc execRpc( client: Socket, i: int, call: var FastRpcRequest, opts: RpcOptions
         print colAquamarine, "[response:kind: ", repr(response.kind), "]"
       response = readResponse()
 
-    while response.kind == frPublish:
+    while response.kind == Publish:
       mnode = response.parseReultsJson()
       response.prettyPrintResults()
 
       response = readResponse()
 
-    if response.kind == frError:
+    if response.kind == Error:
       var resbuf = MsgStream.init(response.result.buf.data)
       var err: FastRpcError
       resbuf.setPosition(0)
@@ -220,6 +220,8 @@ proc call(ip: IpAddress,
           port=Port(5656),
           dry_run=false,
           quiet=false,
+          silent=false,
+          noresults=false,
           pretty=false,
           count=1,
           delay=0,
@@ -234,6 +236,8 @@ proc call(ip: IpAddress,
                         ipAddr: ip,
                         port: port,
                         quiet: quiet,
+                        noprint: silent,
+                        noresults: noresults,
                         dryRun: dry_run,
                         showstats: showstats,
                         prettyPrint: pretty,
@@ -261,13 +265,13 @@ proc call(ip: IpAddress,
   var ss = MsgBuffer.init()
   ss.write jargs.fromJsonNode()
   # ss.pack(jargs)
-  let kind = if opts.system: frSystemRequest
-             elif opts.subscribe: frSubscribe
-             else: frRequest
+  let kind = if opts.system: SystemRequest
+             elif opts.subscribe: Subscribe
+             else: Request
   var call = FastRpcRequest(kind: kind,
                             id: 1,
                             procName: name,
-                            params: (buf: ss))
+                            params: FastRpcParamsBuffer(buf: ss))
 
   print(colYellow, "CALL:", repr call)
   var sc = MsgBuffer.init()

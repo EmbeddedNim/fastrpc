@@ -1,11 +1,12 @@
 import json, tables, strutils, macros, options
-import ../inet_types
+import ../inettypes
+import ../socketservers/sockethelpers
 
 import marshal_json
 
 export marshal_json
 export tables
-export inet_types
+export inettypes, sockethelpers
 
 ## Code copied from: status-im/nim-json-rpc is licensed under the Apache License 2.0
 
@@ -22,7 +23,7 @@ type
   RpcJsonErrorContainer* = tuple[err: RpcJsonError, msg: string]
 
   # Procedure signature accepted as an RPC call by server
-  RpcProc* = proc(input: JsonNode, context: SocketClientSender): JsonNode {.gcsafe.}
+  RpcProc* = proc(input: JsonNode, context: string): JsonNode {.gcsafe.}
 
   RpcProcError* = object of ValueError
     code*: int
@@ -41,7 +42,6 @@ type
   JsonRpcSubsArgs* = ref object
     subid*: JsonRpcSubId
     data*: JsonNode
-    sender*: SocketClientSender 
   
 proc wrapResponse*(rpcCall: JsonRpcCall, ret: JsonNode): JsonNode = 
   result = %* {"jsonrpc": "2.0", "result": ret, "id": rpcCall.id}

@@ -17,7 +17,7 @@ from cligen/argcvt import ArgcvtParams, argKeys         # Little helpers
 when not defined(TcpJsonRpcServer):
   import msgpack4nim/msgpack2json
 
-import fast_rpc/socketserver/common_handlers
+import fastrpc/socketserver/sockethelpers
 
 enableTrueColors()
 proc print*(text: varargs[string]) =
@@ -47,8 +47,9 @@ type
     port: Port
     prettyPrint: bool
     quiet: bool
-    dryRun: bool
+    noresults: bool
     noprint: bool
+    dryRun: bool
 
 var totalTime = 0'i64
 var totalCalls = 0'i64
@@ -85,7 +86,7 @@ proc execRpc( client: Socket, i: int, call: JsonNode, opts: RpcOptions): JsonNod
       client.send( mcall )
       var msgLenBytes = client.recv(4, timeout = -1)
       if msgLenBytes.len() == 0: return
-      var msgLen: int = msgLenBytes.lengthFromBigendian16()
+      var msgLen: int = msgLenBytes.fromStrBe16()
       if not opts.quiet and not opts.noprint:
         print("[socket data:lenstr: " & repr(msgLenBytes) & "]")
         print("[socket data:len: " & repr(msgLen) & "]")
@@ -202,6 +203,8 @@ proc call(ip: IpAddress,
           port=Port(5555),
           dry_run=false,
           quiet=false,
+          noresults=false,
+          noprint=false,
           pretty=false,
           count=1,
           delay=0,
@@ -214,6 +217,7 @@ proc call(ip: IpAddress,
                         ipAddr: ip,
                         port: port,
                         quiet: quiet,
+                        noresults: noresults,
                         dryRun: dry_run,
                         showstats: showstats,
                         prettyPrint: pretty,
