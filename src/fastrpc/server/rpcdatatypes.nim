@@ -58,6 +58,19 @@ type
     outQueue*: InetMsgQueue
     registerQueue*: RpcSubIdQueue
 
+
+type
+  ## Rpc Streamer Task types
+  RpcStreamSerializerClosure* = proc(): FastRpcParamsBuffer 
+  RpcStreamSerializer*[T] =
+    proc(queue: InetEventQueue[T]): RpcStreamSerializerClosure {.nimcall.}
+
+  TaskOption*[T] = object
+    data*: T
+    ch*: Chan[T]
+
+  RpcStreamTask*[T, O] = proc(queue: InetEventQueue[T], options: O) {.closure.}
+
 proc randBinString*(): RpcSubId =
   var idarr: array[sizeof(RpcSubId), byte]
   if urandom(idarr):
@@ -105,3 +118,14 @@ proc rpcUnpack*[T](obj: var T, ss: FastRpcParamsBuffer, resetStream = true) =
     ss.buf.unpack(obj)
   except AssertionDefect as err:
     raise newException(ObjectConversionDefect, "unable to parse parameters: " & err.msg)
+
+template rpcQueuePacker*[T](procName: untyped,
+                            rpcProc: untyped,
+                            res: InetEventQueue[T]
+                            ): untyped =
+  proc `procName`*(queue: InetEventQueue[T]): RpcStreamSerializerClosure  =
+    closureScope:
+      result = proc (): FastRpcParamsBuffer =
+        let res = `rpcProc`(queue)
+        result = rpcPack(res)
+

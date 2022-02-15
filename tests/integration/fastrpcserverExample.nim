@@ -50,12 +50,13 @@ DefineRpcs(name=exampleRpcs):
     result = "correct: " & msg
 
 type
-  TimerDataQueue = InetEventQueue[seq[int64]]
+  TimerDataQ = InetEventQueue[seq[int64]]
+
   TimerOptions {.rpcOption.} = object
     delay: Millis
     count: int
 
-DefineRpcOptions[TimerOptions](name=timerOptionsRpcs):
+DefineRpcTaskOptions[TimerOptions](name=timerOptionsRpcs):
 
   proc setDelay(opt: var TimerOptions, delayMs: int): bool {.rpcSetter.} =
     ## called by the socket server every time there's data
@@ -74,7 +75,7 @@ DefineRpcOptions[TimerOptions](name=timerOptionsRpcs):
     result = option.delay.int
   
 
-proc timeSerializer(queue: TimerDataQueue): Table[string, seq[int64]] {.rpcSerializer.} =
+proc timeSerializer(queue: TimerDataQ): Table[string, seq[int64]] {.rpcSerializer.} =
   ## called by the socket server every time there's data
   ## on the queue argument given the `rpcEventSubscriber`.
   ## 
@@ -83,7 +84,7 @@ proc timeSerializer(queue: TimerDataQueue): Table[string, seq[int64]] {.rpcSeria
     echo "ts: ", tvals
   {"ts": tvals}.toTable()
 
-proc timeSampler*(queue: TimerDataQueue, opts: RpcOption[TimerOptions]) {.rpcThread.} =
+proc timeSampler*(queue: TimerDataQ, opts: TaskOption[TimerOptions]) {.rpcThread.} =
   ## Thread example that runs the as a time publisher. This is a reducer
   ## that gathers time samples and outputs arrays of timestamp samples.
   var delayMs = opts.data.delay.int
@@ -122,14 +123,21 @@ when isMainModule:
 
   echo "running fast rpc example"
   var router = newFastRpcRouter()
+
+  # register the `exampleRpcs` with our RPC router
   router.registerRpcs(exampleRpcs)
-  router.registerDatastream("ADC1",
-                            serializer=timeSerializer,
-                            reducer=timeSampler, 
-                            queue = timer1q,
-                            option = TimerOptions(delay: 100.Millis),
-                            optionRpcs = timerOptionsRpcs,
-                            )
+
+  # register a `datastream` with our RPC router
+  router.registerDataStream(
+    "adc1",
+    serializer=timeSerializer,
+    reducer=timeSampler, 
+    queue = timer1q,
+    option = TimerOptions(delay: 100.Millis),
+    optionRpcs = timerOptionsRpcs,
+  )
+
+  # print out all our new rpc's!
   for rpc in router.procs.keys():
     echo "  rpc: ", rpc
 

@@ -6,8 +6,8 @@ import mcu_utils/msgbuffer
 include mcu_utils/threads
 
 export options
-import datatypes
-export datatypes
+import rpcdatatypes
+export rpcdatatypes
 import router
 export router
 
@@ -104,6 +104,7 @@ macro rpcImpl*(p: untyped, publish: untyped, qarg: untyped): untyped =
   let
     # determine if this is a "system" rpc method
     pubthread = publish.kind == nnkStrLit and publish.strVal == "thread"
+    serializer = publish.kind == nnkStrLit and publish.strVal == "serializer"
     syspragma = not pragmas.findChild(it.repr == "system").isNil
 
     # rpc method names
@@ -111,14 +112,14 @@ macro rpcImpl*(p: untyped, publish: untyped, qarg: untyped): untyped =
     procNameStr = pathStr.makeProcName()
 
     # public rpc proc
-    procName = ident(procNameStr)
+    procName = ident(procNameStr & "Func")
+    rpcMethod = ident(procNameStr)
+
     ctxName = ident("context")
 
     # parameter type name
     paramsIdent = genSym(nskParam, "args")
     paramTypeName = ident("RpcType_" & procNameStr)
-
-    rpcMethod = ident(procNameStr & "RpcMethod")
 
   var
     # process the argument types
@@ -134,7 +135,7 @@ macro rpcImpl*(p: untyped, publish: untyped, qarg: untyped): untyped =
                       ident "void"
 
   # Create the proc's that hold the users code 
-  if not pubthread:
+  if not pubthread and not serializer:
     result.add quote do:
       `paramTypes`
 
@@ -174,6 +175,22 @@ macro rpcImpl*(p: untyped, publish: untyped, qarg: untyped): untyped =
             result = rpcPack(res)
 
       register(router, `path`, `qarg`.evt, `rpcMethod`)
+  elif serializer:
+    var rpcFunc = quote do:
+      proc `procName`(): `ReturnType` =
+        `procBody`
+    rpcFunc[3] = params
+    var rpcMethod = quote do:
+      proc `rpcMethod`(): RpcStreamSerializer =
+        closureScope: # 
+          result =
+            proc(): FastRpcParamsBuffer =
+              # let res = `procName`(queue)
+              # result = rpcPack(res)
+              echo "make serializer"
+              result = FastRpcParamsBuffer(buf: MsgBuffer.init(""))
+    rpcMethod[3] = params
+    result.add newStmtList(rpcFunc, rpcMethod)
 
 macro rpcOption*(p: untyped): untyped =
   result = p
@@ -192,9 +209,10 @@ template rpcPublisher*(args: static[Millis], p: untyped): untyped =
 template rpcThread*(p: untyped): untyped =
   `p`
 
-macro rpcSerializer*(p: untyped): untyped =
+template rpcSerializer*(p: untyped): untyped =
   # rpcImpl(p, "thread", qarg)
-  result = p
+  # static: echo "RPCSERIALIZER:\n", treeRepr p
+  rpcImpl(p, "serializer", nil)
 
 macro DefineRpcs*(name: untyped, args: varargs[untyped]) =
   ## annotates that a proc is an `rpcRegistrationProc` and
@@ -221,12 +239,7 @@ macro DefineRpcs*(name: untyped, args: varargs[untyped]) =
     pArgs.add parg
   echo "PARGS: ", pArgs.treeRepr
 
-type
-  RpcOption*[T] = object
-    data*: T
-    ch*: Chan[T]
-
-macro DefineRpcOptions*[T](name: untyped, args: varargs[untyped]) =
+macro DefineRpcTaskOptions*[T](name: untyped, args: varargs[untyped]) =
   ## annotates that a proc is an `rpcRegistrationProc` and
   ## that it takes the correct arguments. In particular 
   ## the first parameter must be `router: var FastRpcRouter`. 
@@ -247,34 +260,31 @@ macro DefineRpcOptions*[T](name: untyped, args: varargs[untyped]) =
     pArgs.add parg
   echo "PARGS: ", pArgs.treeRepr
 
-macro registerRpcs*(router: var FastRpcRouter, namespace: typed, args: varargs[untyped]) =
-  echo "registerNamespace:name: ", treeRepr namespace
-  echo "registerNamespace:ARGS: ", treeRepr args
+macro registerRpcs*(router: var FastRpcRouter,
+                    registerClosure: typed,
+                    args: varargs[untyped]) =
   if args.len() > 0:
     result = quote do:
-      `namespace`(router, `args`)
+      `registerClosure`(router, `args`) # 
   else:
     result = quote do:
-      `namespace`(router)
-  echo "registerNamespace:RES: ", treeRepr result
+      `registerClosure`(router)
 
-macro registerDatastream*(router: var FastRpcRouter,
-                          namespace: typed,
-                          args: varargs[untyped]) =
-  echo "registerNamespace:name: ", treeRepr namespace
-  echo "registerNamespace:ARGS: ", treeRepr args
-  if args.len() > 0:
-    result = quote do:
-      `namespace`(router, `args`)
-  else:
-    result = quote do:
-      `namespace`(router)
-  echo "registerNamespace:RES: ", treeRepr result
-
-proc getUpdatedOption*[T](chan: RpcOption[T]): Option[T] =
+macro registerDatastream*[T,O](router: var FastRpcRouter,
+                          name: string,
+                          serializer: RpcStreamSerializer[T],
+                          reducer: RpcStreamTask[T, O],
+                          queue: InetEventQueue[T],
+                          option: O,
+                          optionRpcs: typed,
+                          ) =
+  result = quote do:
+    `optionRpcs`(`router`)
+                      
+proc getUpdatedOption*[T](chan: TaskOption[T]): Option[T] =
   # chan.tryRecv()
   return some(T())
-proc getRpcOption*[T](chan: RpcOption[T]): T =
+proc getRpcOption*[T](chan: TaskOption[T]): T =
   # chan.tryRecv()
   return T()
 

@@ -8,8 +8,8 @@ include mcu_utils/threads
 import msgpack4nim
 export msgpack4nim
 
-import datatypes
-export datatypes
+import rpcdatatypes
+export rpcdatatypes
 export Millis
 
 proc wrapResponse*(id: FastRpcId, resp: FastRpcParamsBuffer, kind = Response): FastRpcResponse = 
