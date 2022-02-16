@@ -267,18 +267,16 @@ macro registerRpcs*(router: var FastRpcRouter,
   result = quote do:
     `registerClosure`(`router`, `args`) # 
 
-template startDataStream*[T,U](
-        streamProc: untyped,
-        streamThread: untyped,
-        queue: InetEventQueue[T],
-        option: U,
-        ): RpcStreamThread[T,U] =
-  var tchan: Chan[TaskOption[U]] = newChan[TaskOption[U]](1)
-  echo "tchan: " 
-  var arg: ThreadTuple[T, U] # = (queue: queue, chan: tchan)
-  var result: RpcStreamThread[T, U]
-  createThread[ThreadTuple[T, U]](result, streamThread, arg)
-  result
+# template startDataStream*(
+#         streamProc: untyped,
+#         streamThread: untyped,
+#         queue: untyped,
+#         ): RpcStreamThread[T,U] =
+#   var tchan: Chan[TaskOption[U]] = newChan[TaskOption[U]](1)
+#   var arg = ThreadArg[T,U](queue: iqueue, chan: tchan)
+#   var result: RpcStreamThread[T, U]
+#   createThread[ThreadArg[T, U]](result, streamThread, move arg)
+#   result
 
 macro registerDatastream*[T,O,R](
               router: var FastRpcRouter,

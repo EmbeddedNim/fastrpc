@@ -86,30 +86,30 @@ proc timeSerializer(queue: TimerDataQ): Table[string, seq[int64]] {.rpcSerialize
 proc timeSampler*(queue: TimerDataQ, opts: TaskOption[TimerOptions]) {.rpcThread.} =
   ## Thread example that runs the as a time publisher. This is a reducer
   ## that gathers time samples and outputs arrays of timestamp samples.
-  var delayMs = opts.data.delay.int
-  var n = opts.data.count
+  var data = opts.data
 
   while true:
-    var tvals = newSeqOfCap[int64](n)
-    for i in 0..n:
+    var tvals = newSeqOfCap[int64](data.count)
+    for i in 0..<data.count:
       var ts = int64(getMonoTime().ticks() div 1000)
       tvals.add ts
-      os.sleep(delayMs div (2*n))
+      os.sleep(data.delay.int div (2*data.count))
 
-    logInfo "timePublisher: ", "ts:", tvals[^1], "queue:len:", queue.chan.peek()
+    logInfo "timePublisher: ", "ts:", tvals.repr
+    logInfo "queue:len:", queue.chan.peek()
     var qvals = isolate tvals
 
-    let newOpts = opts.getUpdatedOption()
-    if newOpts.isSome:
-      echo "setting new parameters: ", repr(newOpts)
-      delayMs = newOpts.get().delay.int
-      n = newOpts.get().count
+    # let newOpts = opts.getUpdatedOption()
+    # if newOpts.isSome:
+      # echo "setting new parameters: ", repr(newOpts)
+      # data = newOpts.get()
 
     discard queue.trySend(qvals)
-    os.sleep(delayMs)
+    os.sleep(data.delay.int)
 
-proc streamThread*(arg: ThreadTuple[seq[int64], TimerOptions]) {.thread, nimcall.} = 
-  echo "STREAM HI!!"
+proc streamThread*(arg: ThreadArg[seq[int64], TimerOptions]) {.thread, nimcall.} = 
+  echo "streamThread: ", repr(arg.opt.data)
+  timeSampler(arg.queue, arg.opt)
 
 
 when isMainModule:
@@ -118,17 +118,26 @@ when isMainModule:
     newInetAddr("0.0.0.0", 5656, Protocol.IPPROTO_TCP),
   ]
 
+  echo "setup timer thread"
   var
     timer1q = TimerDataQ.init(10)
-    timerOpt = TimerOptions(delay: 100.Millis)
+    timerOpt = TimerOptions(delay: 100.Millis, count: 10)
 
-  var timerThr = startDataStream(
-    timeSampler,
-    streamThread,
-    timer1q,
-    timerOpt,
-  )
+  var tchan: Chan[TimerOptions] = newChan[TimerOptions](1)
+  var topt = TaskOption[TimerOptions](data: timerOpt, ch: tchan)
+  var arg = ThreadArg[seq[int64],TimerOptions](queue: timer1q, opt: topt)
+  var result: RpcStreamThread[seq[int64], TimerOptions]
+  createThread[ThreadArg[seq[int64], TimerOptions]](result, streamThread, move arg)
 
+  # echo "start timer thread"
+  # var timerThr = startDataStream(
+  #   timeSampler,
+  #   streamThread,
+  #   timer1q,
+  #   timerOpt,
+  # )
+
+  os.sleep(5_000)
   echo "running fast rpc example"
   var router = newFastRpcRouter()
 
@@ -136,6 +145,7 @@ when isMainModule:
   router.registerRpcs(exampleRpcs)
 
   # register a `datastream` with our RPC router
+  echo "register datastream"
   router.registerDataStream(
     "microspub",
     serializer=timeSerializer,
