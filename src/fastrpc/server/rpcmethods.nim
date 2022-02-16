@@ -281,6 +281,7 @@ macro registerDatastream*[T,O,R](
     `optionRpcs`(`router`)
     router.register(`name`, `queue`.evt, serClosure)
   echo "REG:DATASTREAM:\n", result.repr
+  echo ""
 
                       
 proc getUpdatedOption*[T](chan: TaskOption[T]): Option[T] =
