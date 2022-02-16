@@ -57,7 +57,6 @@ type
     count: int
 
 DefineRpcTaskOptions[TimerOptions](name=timerOptionsRpcs):
-
   proc setDelay(opt: var TimerOptions, delayMs: int): bool {.rpcSetter.} =
     ## called by the socket server every time there's data
     ## on the queue argument given the `rpcEventSubscriber`.
@@ -129,7 +128,7 @@ when isMainModule:
 
   # register a `datastream` with our RPC router
   router.registerDataStream(
-    "adc1",
+    "microspub",
     serializer=timeSerializer,
     reducer=timeSampler, 
     queue = timer1q,

@@ -2,8 +2,11 @@ import tables, strutils, macros
 import options
 
 import mcu_utils/basictypes
+import mcu_utils/inettypes
+import mcu_utils/inetqueues
 import mcu_utils/msgbuffer
 include mcu_utils/threads
+export inettypes, inetqueues
 
 export options
 import rpcdatatypes
@@ -227,7 +230,7 @@ macro DefineRpcs*(name: untyped, args: varargs[untyped]) =
   #   " Instead got: `" & treeRepr(router) & "`")
   let rname = ident("router")
   result = quote do:
-    proc `name`(`rname`: var FastRpcRouter) =
+    proc `name`*(`rname`: var FastRpcRouter) =
       `pbody`
   
   var pArgs = result[3]
@@ -248,35 +251,37 @@ macro DefineRpcTaskOptions*[T](name: untyped, args: varargs[untyped]) =
 
   let rname = ident("router")
   result = quote do:
-    proc `name`(`rname`: var FastRpcRouter) =
+    proc `name`*(`rname`: var FastRpcRouter) =
       `pbody`
   
   var pArgs = result[3]
   for param in params:
     let parg = newIdentDefs(param[0], param[1])
     pArgs.add parg
-  echo "PARGS: ", pArgs.treeRepr
+  echo "TASK:OPTS:\n", result.repr
 
 macro registerRpcs*(router: var FastRpcRouter,
-                    registerClosure: typed,
+                    registerClosure: untyped,
                     args: varargs[untyped]) =
-  if args.len() > 0:
-    result = quote do:
-      `registerClosure`(router, `args`) # 
-  else:
-    result = quote do:
-      `registerClosure`(router)
-
-macro registerDatastream*[T,O](router: var FastRpcRouter,
-                          name: string,
-                          serializer: RpcStreamSerializer[T],
-                          reducer: RpcStreamTask[T, TaskOption[O]],
-                          queue: InetEventQueue[T],
-                          option: O,
-                          optionRpcs: typed,
-                          ) =
   result = quote do:
+    `registerClosure`(`router`, `args`) # 
+
+macro registerDatastream*[T,O,R](
+              router: var FastRpcRouter,
+              name: string,
+              serializer: RpcStreamSerializer[T],
+              reducer: RpcStreamTask[T, TaskOption[O]],
+              queue: InetEventQueue[T],
+              option: O,
+              optionRpcs: R) =
+  echo "registerDatastream: T: ", repr(T)
+  result = quote do:
+    let serClosure: RpcStreamSerializerClosure =
+            `serializer`(`queue`)
     `optionRpcs`(`router`)
+    router.register(`name`, `queue`.evt, serClosure)
+  echo "REG:DATASTREAM:\n", result.repr
+
                       
 proc getUpdatedOption*[T](chan: TaskOption[T]): Option[T] =
   # chan.tryRecv()

@@ -1,5 +1,8 @@
 
 import std/tables, std/sets, std/macros, std/sysrand
+import std/sugar
+
+export sugar
 
 import std/selectors
 
@@ -42,10 +45,10 @@ type
   RpcSubId* = int32
   RpcSubIdQueue* = InetEventQueue[InetQueueItem[(RpcSubId, SelectEvent)]]
 
-  FastRpcEventProc* = proc(): FastRpcParamsBuffer {.gcsafe, closure.}
+  RpcStreamSerializerClosure* = proc(): FastRpcParamsBuffer {.closure.}
 
   RpcSubClients* = object
-    eventProc*: FastRpcEventProc
+    eventProc*: RpcStreamSerializerClosure
     subs*: TableRef[InetClientHandle, RpcSubId]
 
   FastRpcRouter* = ref object
@@ -61,7 +64,6 @@ type
 
 type
   ## Rpc Streamer Task types
-  RpcStreamSerializerClosure* = proc(): FastRpcParamsBuffer 
   RpcStreamSerializer*[T] =
     proc(queue: InetEventQueue[T]): RpcStreamSerializerClosure {.nimcall.}
 
@@ -70,6 +72,7 @@ type
     ch*: Chan[T]
 
   RpcStreamTask*[T, O] = proc(queue: InetEventQueue[T], options: O) {.closure.}
+
 
 proc randBinString*(): RpcSubId =
   var idarr: array[sizeof(RpcSubId), byte]
@@ -122,10 +125,9 @@ proc rpcUnpack*[T](obj: var T, ss: FastRpcParamsBuffer, resetStream = true) =
 
 template rpcQueuePacker*(procName: untyped,
                          rpcProc: untyped,
-                         qt: typed,
+                         qt: untyped,
                             ): untyped =
   proc `procName`*(queue: `qt`): RpcStreamSerializerClosure  =
-    closureScope:
       result = proc (): FastRpcParamsBuffer =
         let res = `rpcProc`(queue)
         result = rpcPack(res)
