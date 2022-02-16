@@ -117,13 +117,14 @@ proc rpcUnpack*[T](obj: var T, ss: FastRpcParamsBuffer, resetStream = true) =
       ss.buf.setPosition(0)
     ss.buf.unpack(obj)
   except AssertionDefect as err:
-    raise newException(ObjectConversionDefect, "unable to parse parameters: " & err.msg)
+    raise newException(ObjectConversionDefect,
+                       "unable to parse parameters: " & err.msg)
 
-template rpcQueuePacker*[T](procName: untyped,
-                            rpcProc: untyped,
-                            res: InetEventQueue[T]
+template rpcQueuePacker*(procName: untyped,
+                         rpcProc: untyped,
+                         qt: typed,
                             ): untyped =
-  proc `procName`*(queue: InetEventQueue[T]): RpcStreamSerializerClosure  =
+  proc `procName`*(queue: `qt`): RpcStreamSerializerClosure  =
     closureScope:
       result = proc (): FastRpcParamsBuffer =
         let res = `rpcProc`(queue)

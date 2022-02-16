@@ -180,16 +180,13 @@ macro rpcImpl*(p: untyped, publish: untyped, qarg: untyped): untyped =
       proc `procName`(): `ReturnType` =
         `procBody`
     rpcFunc[3] = params
+    let qarg = params[1]
+    assert qarg.kind == nnkIdentDefs and qarg[0].repr == "queue"
+    let qt = qarg[1] # first param...
+    echo "PARAMS:\n", params.treeRepr
     var rpcMethod = quote do:
-      proc `rpcMethod`(): RpcStreamSerializer =
-        closureScope: # 
-          result =
-            proc(): FastRpcParamsBuffer =
-              # let res = `procName`(queue)
-              # result = rpcPack(res)
-              echo "make serializer"
-              result = FastRpcParamsBuffer(buf: MsgBuffer.init(""))
-    rpcMethod[3] = params
+      rpcQueuePacker(`rpcMethod`, `procName`, `qt`)
+    # rpcMethod[3] = params
     result.add newStmtList(rpcFunc, rpcMethod)
 
 macro rpcOption*(p: untyped): untyped =
@@ -273,7 +270,7 @@ macro registerRpcs*(router: var FastRpcRouter,
 macro registerDatastream*[T,O](router: var FastRpcRouter,
                           name: string,
                           serializer: RpcStreamSerializer[T],
-                          reducer: RpcStreamTask[T, O],
+                          reducer: RpcStreamTask[T, TaskOption[O]],
                           queue: InetEventQueue[T],
                           option: O,
                           optionRpcs: typed,
