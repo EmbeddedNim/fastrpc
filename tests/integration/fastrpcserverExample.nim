@@ -108,6 +108,9 @@ proc timeSampler*(queue: TimerDataQ, opts: TaskOption[TimerOptions]) {.rpcThread
     discard queue.trySend(qvals)
     os.sleep(delayMs)
 
+proc streamThread*(arg: ThreadTuple[seq[int64], TimerOptions]) {.thread, nimcall.} = 
+  echo "STREAM HI!!"
+
 
 when isMainModule:
   let inetAddrs = [
@@ -115,10 +118,16 @@ when isMainModule:
     newInetAddr("0.0.0.0", 5656, Protocol.IPPROTO_TCP),
   ]
 
-  # var timerThr: Thread[(InetEventQueue[seq[int64]], int)]
-  # timerThr.createThread(timeSamplerReducer, (timer1q , 1_000))
+  var
+    timer1q = TimerDataQ.init(10)
+    timerOpt = TimerOptions(delay: 100.Millis)
 
-  var timer1q = InetEventQueue[seq[int64]].init(10)
+  var timerThr = startDataStream(
+    timeSampler,
+    streamThread,
+    timer1q,
+    timerOpt,
+  )
 
   echo "running fast rpc example"
   var router = newFastRpcRouter()

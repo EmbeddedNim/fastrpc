@@ -71,8 +71,11 @@ type
     data*: T
     ch*: Chan[T]
 
-  RpcStreamTask*[T, O] = proc(queue: InetEventQueue[T], options: O) {.closure.}
+  RpcStreamTask*[T, O] = proc(queue: InetEventQueue[T], options: TaskOption[O])
 
+
+  ThreadTuple*[T, U] = tuple[queue: InetEventQueue[T], chan: Chan[TaskOption[U]]]
+  RpcStreamThread*[T, U] = Thread[ThreadTuple[T, U]]
 
 proc randBinString*(): RpcSubId =
   var idarr: array[sizeof(RpcSubId), byte]
