@@ -1,5 +1,8 @@
 
 import std/tables, std/sets, std/macros, std/sysrand
+import std/sugar
+
+export sugar
 
 import std/selectors
 
@@ -36,18 +39,16 @@ type
                       context: RpcContext
                       ): FastRpcParamsBuffer {.gcsafe, nimcall.}
 
-  RpcRegistrationProc* = proc(router: var FastRpcRouter)
-
   FastRpcBindError* = object of ValueError
   FastRpcAddressUnresolvableError* = object of ValueError
 
   RpcSubId* = int32
   RpcSubIdQueue* = InetEventQueue[InetQueueItem[(RpcSubId, SelectEvent)]]
 
-  FastRpcEventProc* = proc(): FastRpcParamsBuffer {.gcsafe, closure.}
+  RpcStreamSerializerClosure* = proc(): FastRpcParamsBuffer {.closure.}
 
   RpcSubClients* = object
-    eventProc*: FastRpcEventProc
+    eventProc*: RpcStreamSerializerClosure
     subs*: TableRef[InetClientHandle, RpcSubId]
 
   FastRpcRouter* = ref object
@@ -59,6 +60,25 @@ type
     inQueue*: InetMsgQueue
     outQueue*: InetMsgQueue
     registerQueue*: RpcSubIdQueue
+
+
+type
+  ## Rpc Streamer Task types
+  RpcStreamSerializer*[T] =
+    proc(queue: InetEventQueue[T]): RpcStreamSerializerClosure {.nimcall.}
+
+  TaskOption*[T] = object
+    data*: T
+    ch*: Chan[T]
+
+  RpcStreamTask*[T, O] = proc(queue: InetEventQueue[T], options: TaskOption[O])
+
+
+  ThreadArg*[T, U] = object
+    queue*: InetEventQueue[T]
+    opt*: TaskOption[U]
+
+  RpcStreamThread*[T, U] = Thread[ThreadArg[T, U]]
 
 proc randBinString*(): RpcSubId =
   var idarr: array[sizeof(RpcSubId), byte]
@@ -106,4 +126,15 @@ proc rpcUnpack*[T](obj: var T, ss: FastRpcParamsBuffer, resetStream = true) =
       ss.buf.setPosition(0)
     ss.buf.unpack(obj)
   except AssertionDefect as err:
-    raise newException(ObjectConversionDefect, "unable to parse parameters: " & err.msg)
+    raise newException(ObjectConversionDefect,
+                       "unable to parse parameters: " & err.msg)
+
+template rpcQueuePacker*(procName: untyped,
+                         rpcProc: untyped,
+                         qt: untyped,
+                            ): untyped =
+  proc `procName`*(queue: `qt`): RpcStreamSerializerClosure  =
+      result = proc (): FastRpcParamsBuffer =
+        let res = `rpcProc`(queue)
+        result = rpcPack(res)
+

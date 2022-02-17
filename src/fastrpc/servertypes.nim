@@ -8,7 +8,7 @@ import mcu_utils/logging
 import mcu_utils/msgbuffer
 import mcu_utils/inettypes
 
-import server/datatypes
+import server/rpcdatatypes
 
 export options
 

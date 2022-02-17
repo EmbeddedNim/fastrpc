@@ -8,8 +8,8 @@ include mcu_utils/threads
 import msgpack4nim
 export msgpack4nim
 
-import datatypes
-export datatypes
+import rpcdatatypes
+export rpcdatatypes
 export Millis
 
 proc wrapResponse*(id: FastRpcId, resp: FastRpcParamsBuffer, kind = Response): FastRpcResponse = 
@@ -43,10 +43,13 @@ proc createRpcRouter*(): FastRpcRouter =
   result = new(FastRpcRouter)
   result.procs = initTable[string, FastRpcProc]()
 
-proc register*(router: var FastRpcRouter, path: string, evt: SelectEvent, call: FastRpcEventProc) =
+proc register*(router: var FastRpcRouter;
+               path: string,
+               evt: SelectEvent,
+               serializer: RpcStreamSerializerClosure) =
   router.subNames[path] = evt
   let subs = newTable[InetClientHandle, RpcSubId]()
-  router.subEventProcs[evt] = RpcSubClients(eventProc: call, subs: subs)
+  router.subEventProcs[evt] = RpcSubClients(eventProc: serializer, subs: subs)
   echo "registering:sub: ", path
 
 proc register*(router: var FastRpcRouter, path: string, call: FastRpcProc) =

@@ -1,11 +1,17 @@
 import tables, strutils, macros
+import options
+import threading/channels
 
 import mcu_utils/basictypes
+import mcu_utils/inettypes
+import mcu_utils/inetqueues
 import mcu_utils/msgbuffer
 include mcu_utils/threads
+export inettypes, inetqueues
 
-import datatypes
-export datatypes
+export options
+import rpcdatatypes
+export rpcdatatypes
 import router
 export router
 
@@ -102,6 +108,7 @@ macro rpcImpl*(p: untyped, publish: untyped, qarg: untyped): untyped =
   let
     # determine if this is a "system" rpc method
     pubthread = publish.kind == nnkStrLit and publish.strVal == "thread"
+    serializer = publish.kind == nnkStrLit and publish.strVal == "serializer"
     syspragma = not pragmas.findChild(it.repr == "system").isNil
 
     # rpc method names
@@ -109,14 +116,14 @@ macro rpcImpl*(p: untyped, publish: untyped, qarg: untyped): untyped =
     procNameStr = pathStr.makeProcName()
 
     # public rpc proc
-    procName = ident(procNameStr)
+    procName = ident(procNameStr & "Func")
+    rpcMethod = ident(procNameStr)
+
     ctxName = ident("context")
 
     # parameter type name
     paramsIdent = genSym(nskParam, "args")
     paramTypeName = ident("RpcType_" & procNameStr)
-
-    rpcMethod = ident(procNameStr & "RpcMethod")
 
   var
     # process the argument types
@@ -132,7 +139,7 @@ macro rpcImpl*(p: untyped, publish: untyped, qarg: untyped): untyped =
                       ident "void"
 
   # Create the proc's that hold the users code 
-  if not pubthread:
+  if not pubthread and not serializer:
     result.add quote do:
       `paramTypes`
 
@@ -172,6 +179,27 @@ macro rpcImpl*(p: untyped, publish: untyped, qarg: untyped): untyped =
             result = rpcPack(res)
 
       register(router, `path`, `qarg`.evt, `rpcMethod`)
+  elif serializer:
+    var rpcFunc = quote do:
+      proc `procName`(): `ReturnType` =
+        `procBody`
+    rpcFunc[3] = params
+    let qarg = params[1]
+    assert qarg.kind == nnkIdentDefs and qarg[0].repr == "queue"
+    let qt = qarg[1] # first param...
+    echo "PARAMS:\n", params.treeRepr
+    var rpcMethod = quote do:
+      rpcQueuePacker(`rpcMethod`, `procName`, `qt`)
+    # rpcMethod[3] = params
+    result.add newStmtList(rpcFunc, rpcMethod)
+
+macro rpcOption*(p: untyped): untyped =
+  result = p
+
+macro rpcSetter*(p: untyped): untyped =
+  result = p
+macro rpcGetter*(p: untyped): untyped =
+  result = p
 
 template rpc*(p: untyped): untyped =
   rpcImpl(p, nil, nil)
@@ -179,20 +207,103 @@ template rpc*(p: untyped): untyped =
 template rpcPublisher*(args: static[Millis], p: untyped): untyped =
   rpcImpl(p, args, nil)
 
-template rpcEventSubscriber*(qarg: typed, p: untyped): untyped =
-  rpcImpl(p, "thread", qarg)
+template rpcThread*(p: untyped): untyped =
+  `p`
 
-macro rpcRegistrationProc*(pbody: untyped): untyped =
+template rpcSerializer*(p: untyped): untyped =
+  # rpcImpl(p, "thread", qarg)
+  # static: echo "RPCSERIALIZER:\n", treeRepr p
+  rpcImpl(p, "serializer", nil)
+
+macro DefineRpcs*(name: untyped, args: varargs[untyped]) =
   ## annotates that a proc is an `rpcRegistrationProc` and
   ## that it takes the correct arguments. In particular 
   ## the first parameter must be `router: var FastRpcRouter`. 
   ## 
-  let firstArg = pbody[3].firstArgument()
-  if firstArg[0] != "router" or firstArg[1] != "var FastRpcRouter":
-    error("Incorrect definition for a `rpcRegistrationProc`." &
-    "The first parameter to an rpc registration proc must be named `router` and be of type `var FastRpcRouter`." &
-    " Instead got: `" & repr(firstArg) & "`")
-  result = pbody
+  let
+    params = if args.len() >= 2: args[0..^2]
+             else: newSeq[NimNode]()
+    pbody = args[^1]
+
+  # if router.repr != "var FastRpcRouter":
+  #   error("Incorrect definition for a `rpcNamespace`." &
+  #   "The first parameter to an rpc registration namespace must be named `router` and be of type `var FastRpcRouter`." &
+  #   " Instead got: `" & treeRepr(router) & "`")
+  let rname = ident("router")
+  result = quote do:
+    proc `name`*(`rname`: var FastRpcRouter) =
+      `pbody`
+  
+  var pArgs = result[3]
+  for param in params:
+    let parg = newIdentDefs(param[0], param[1])
+    pArgs.add parg
+  echo "PARGS: ", pArgs.treeRepr
+
+macro DefineRpcTaskOptions*[T](name: untyped, args: varargs[untyped]) =
+  ## annotates that a proc is an `rpcRegistrationProc` and
+  ## that it takes the correct arguments. In particular 
+  ## the first parameter must be `router: var FastRpcRouter`. 
+  ## 
+  let
+    params = if args.len() >= 1: args[0..^2]
+             else: newSeq[NimNode]()
+    pbody = args[^1]
+
+  let rname = ident("router")
+  result = quote do:
+    proc `name`*(`rname`: var FastRpcRouter) =
+      `pbody`
+  
+  var pArgs = result[3]
+  for param in params:
+    let parg = newIdentDefs(param[0], param[1])
+    pArgs.add parg
+  echo "TASK:OPTS:\n", result.repr
+
+macro registerRpcs*(router: var FastRpcRouter,
+                    registerClosure: untyped,
+                    args: varargs[untyped]) =
+  result = quote do:
+    `registerClosure`(`router`, `args`) # 
+
+# template startDataStream*(
+#         streamProc: untyped,
+#         streamThread: untyped,
+#         queue: untyped,
+#         ): RpcStreamThread[T,U] =
+#   var tchan: Chan[TaskOption[U]] = newChan[TaskOption[U]](1)
+#   var arg = ThreadArg[T,U](queue: iqueue, chan: tchan)
+#   var result: RpcStreamThread[T, U]
+#   createThread[ThreadArg[T, U]](result, streamThread, move arg)
+#   result
+
+macro registerDatastream*[T,O,R](
+              router: var FastRpcRouter,
+              name: string,
+              serializer: RpcStreamSerializer[T],
+              reducer: RpcStreamTask[T, TaskOption[O]],
+              queue: InetEventQueue[T],
+              option: O,
+              optionRpcs: R) =
+  echo "registerDatastream: T: ", repr(T)
+  result = quote do:
+    let serClosure: RpcStreamSerializerClosure =
+            `serializer`(`queue`)
+    `optionRpcs`(`router`)
+    router.register(`name`, `queue`.evt, serClosure)
+
+  echo "REG:DATASTREAM:\n", result.repr
+  echo ""
+
+                      
+proc getUpdatedOption*[T](chan: TaskOption[T]): Option[T] =
+  # chan.tryRecv()
+  return some(T())
+proc getRpcOption*[T](chan: TaskOption[T]): T =
+  # chan.tryRecv()
+  return T()
+
 
 proc rpcReply*[T](context: RpcContext, value: T, kind: FastRpcType): bool =
   ## TODO: FIXME
