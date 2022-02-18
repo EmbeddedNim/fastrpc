@@ -1,9 +1,12 @@
 import std/monotimes, std/os
 
+import mcu_utils/allocstats
+
 import fastrpc/server/fastrpcserver
 import fastrpc/server/rpcmethods
 
 import json
+import random
 
 # Define RPC Server #
 DefineRpcs(name=exampleRpcs):
@@ -74,14 +77,15 @@ DefineRpcTaskOptions[TimerOptions](name=timerOptionsRpcs):
     result = option.delay.int
   
 
-proc timeSerializer(queue: TimerDataQ): Table[string, seq[int64]] {.rpcSerializer.} =
+proc timeSerializer(queue: TimerDataQ): seq[int64] {.rpcSerializer.} =
   ## called by the socket server every time there's data
   ## on the queue argument given the `rpcEventSubscriber`.
   ## 
-  var tvals: seq[int64]
-  if queue.tryRecv(tvals):
-    echo "ts: ", tvals
-  {"ts": tvals}.toTable()
+  # var tvals: seq[int64]
+  if queue.tryRecv(result):
+    let rs = rand(200)
+    os.sleep(rs)
+    echo "ts: ", result.len()
 
 proc timeSampler*(queue: TimerDataQ, opts: TaskOption[TimerOptions]) {.rpcThread.} =
   ## Thread example that runs the as a time publisher. This is a reducer
@@ -89,25 +93,27 @@ proc timeSampler*(queue: TimerDataQ, opts: TaskOption[TimerOptions]) {.rpcThread
   var data = opts.data
 
   while true:
-    var tvals = newSeqOfCap[int64](data.count)
-    for i in 0..<data.count:
-      var ts = int64(getMonoTime().ticks() div 1000)
-      tvals.add ts
-      os.sleep(data.delay.int div (2*data.count))
+    logAllocStats(lvlInfo):
+      var tvals = newSeqOfCap[int64](data.count)
+      for i in 0..<data.count:
+        var ts = int64(getMonoTime().ticks() div 1000)
+        tvals.add ts
+        #os.sleep(data.delay.int div (2*data.count))
 
-    logInfo "timePublisher: ", "ts:", tvals.repr
-    logInfo "queue:len:", queue.chan.peek()
-    var qvals = isolate tvals
+      logInfo "timePublisher:", "ts:", tvals[0], "len:", tvals.len.repr
+      logInfo "queue:len:", queue.chan.peek()
 
-    # let newOpts = opts.getUpdatedOption()
-    # if newOpts.isSome:
-      # echo "setting new parameters: ", repr(newOpts)
-      # data = newOpts.get()
+      # let newOpts = opts.getUpdatedOption()
+      # if newOpts.isSome:
+        # echo "setting new parameters: ", repr(newOpts)
+        # data = newOpts.get()
 
-    discard queue.trySend(qvals)
-    os.sleep(data.delay.int)
+      os.sleep(data.delay.int)
+      var qvals = isolate tvals
+      discard queue.trySend(qvals)
 
 proc streamThread*(arg: ThreadArg[seq[int64], TimerOptions]) {.thread, nimcall.} = 
+  os.sleep(5_000)
   echo "streamThread: ", repr(arg.opt.data)
   timeSampler(arg.queue, arg.opt)
 
@@ -151,7 +157,7 @@ when isMainModule:
     serializer=timeSerializer,
     reducer=timeSampler, 
     queue = timer1q,
-    option = TimerOptions(delay: 100.Millis),
+    option = timerOpt,
     optionRpcs = timerOptionsRpcs,
   )
 

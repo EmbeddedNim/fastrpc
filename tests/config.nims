@@ -10,3 +10,5 @@ switch("define", "McuUtilsLoggingLevel:lvlDebug")
 
 # switch("define", "nimArcDebug")
 # switch("define", "traceArc")
+# switch("define", "FrpcSocketServerAlloStatsLvl", "lvlInfo")
+

@@ -7,7 +7,7 @@ import posix
 # export net, selectors, tables, posix
 
 import mcu_utils/logging
-import mcu_utils/allocastats
+import mcu_utils/allocstats
 import mcu_utils/inettypes
 
 import servertypes
@@ -15,7 +15,7 @@ import servertypes
 export servertypes
 export inettypes
 
-import sequtils
+import strutils, sequtils
 
 template withExecHandler(name, handlerProc, blk: untyped) =
   ## check handlerProc isn't nil and handle any unexpected errors
@@ -103,6 +103,10 @@ proc processReads[T](srv: ServerInfo[T], selected: ReadyKey) =
   else:
     raise newException(OSError, "unknown socket type: fd: " & repr selected)
 
+const
+  FrpcSocketServerAlloStatsLvl {.strdefine.}: string = "lvlDebug"
+  ssAllocStatsLvl = parseEnum[logging.Level](FrpcSocketServerAlloStatsLvl)
+
 proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
                            serverImpl: Server[T]) =
   # Setup and run a new SocketServer.
@@ -152,7 +156,7 @@ proc startSocketServer*[T](ipaddrs: openArray[InetAddress],
   var srv = newServerInfo[T](serverImpl, select, listners, receivers)
 
   while true:
-    logAllocStats(lvlDebug):
+    logAllocStats(ssAllocStatsLvl):
       var keys: seq[ReadyKey] = select.select(-1)
       logDebug "[SocketServer]::", "keys:", repr(keys)
     
