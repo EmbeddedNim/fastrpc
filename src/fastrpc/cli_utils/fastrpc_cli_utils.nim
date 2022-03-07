@@ -34,6 +34,10 @@ proc print*(color: Color, text: varargs[string]) =
 
 
 type 
+  RpcIpAddress = object
+    ipstring: string
+    ipaddr: IpAddress
+
   RpcOptions = object
     id: int
     showstats: bool
@@ -41,7 +45,7 @@ type
     count: int
     delay: int
     jsonArg: string
-    ipAddr: IpAddress
+    ipAddr: RpcIpAddress
     port: Port
     noresults: bool
     prettyPrint: bool
@@ -170,18 +174,26 @@ proc execRpc( client: Socket, i: int, call: var FastRpcRequest, opts: RpcOptions
 
     mnode
 
+import nativesockets
+
 proc runRpc(opts: RpcOptions, req: FastRpcRequest) = 
   {.cast(gcsafe).}:
     # for (f,v) in margs.pairs():
       # call[f] = v
     var call = req
 
-    let domain = if opts.ipAddr.family == IpAddressFamily.IPv6: Domain.AF_INET6 else: Domain.AF_INET6 
+    let domain = if opts.ipAddr.ipaddr.family == IpAddressFamily.IPv6: Domain.AF_INET6 else: Domain.AF_INET6 
     let client: Socket = newSocket(buffered=false, domain=domain)
 
-    print(colYellow, "[connecting to server ip addr: ", repr opts.ipAddr,"]")
-    client.connect($opts.ipAddr, opts.port)
-    print(colYellow, "[connected to server ip addr: ", $opts.ipAddr,"]")
+    # var aiList = getAddrInfo(opts.ipAddr.ipstring, opts.port, domain)
+    # print(colMagenta, "aiList: ", repr aiList)
+    # let sa = cast[ptr SockAddr_in6](aiList.ai_addr)
+    # print(colMagenta, "aiList: ", repr sa)
+    # print(colMagenta, "sockaddr: ", aiList.ai_addr.getAddrString())
+
+    print(colYellow, "[connecting to server ip addr: ", $opts.ipAddr.ipstring, "]")
+    client.connect(opts.ipAddr.ipstring, opts.port)
+    print(colYellow, "[connected to server ip addr: ", $opts.ipAddr.ipstring,"]")
     print(colBlue, "[call: ", repr call, "]")
 
     for i in 1..opts.count:
@@ -215,7 +227,7 @@ proc runRpc(opts: RpcOptions, req: FastRpcRequest) =
       print(colMagenta, "[variance time: " & $(ss.variance()) & " millis]")
       print(colMagenta, "[standardDeviation time: " & $(ss.standardDeviation()) & " millis]")
 
-proc call(ip: IpAddress,
+proc call(ip: RpcIpAddress,
           cmdargs: seq[string],
           port=Port(5656),
           dry_run=false,
@@ -283,15 +295,16 @@ proc call(ip: IpAddress,
     opts.runRpc(call)
 
 proc run_cli*() =
-  proc argParse(dst: var IpAddress, dfl: IpAddress, a: var ArgcvtParams): bool =
+  proc argParse(dst: var RpcIpAddress, dfl: RpcIpAddress, a: var ArgcvtParams): bool =
     try:
-      dst = a.val.parseIpAddress()
+      let res = a.val.split('%')[0].parseIpAddress()
+      dst = RpcIpAddress(ipstring: a.val, ipaddr: res)
     except CatchableError:
       return false
     return true
 
-  proc argHelp(dfl: IpAddress; a: var ArgcvtParams): seq[string] =
-    argHelp($(dfl), a)
+  proc argHelp(dfl: RpcIpAddress; a: var ArgcvtParams): seq[string] =
+    argHelp($(dfl.ipstring), a)
 
   proc argParse(dst: var Port, dfl: Port, a: var ArgcvtParams): bool =
     try:
