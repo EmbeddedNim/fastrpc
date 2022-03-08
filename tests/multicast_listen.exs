@@ -14,7 +14,7 @@ defmodule UdpThing do
   @maddr <<65298::16, 0::16, 0::16, 0::16, 0::16, 0::16, 0::16, 1::16>>
 
   def run(os \\ :linux, eth \\ "eth0") do
-    port = 1
+    port = 2048
     maddr = ipv6_to_binary("ff12::1")
     IO.inspect maddr, label: :MADDR
     {:ok, ifindx} = :net.if_name2index(eth |> :erlang.binary_to_list)
@@ -40,5 +40,9 @@ defmodule UdpThing do
   end
 end
 
-UdpThing.run(:linux, "enp8s0u1u4u1")
+ifidx =
+  (System.get_env("IFIDX") || System.argv() |> Enum.at(0))
+  |> IO.inspect(label: :IFIDX)
+
+UdpThing.run(:linux, ifidx)
 # UdpThing.run(:macos, "en0")

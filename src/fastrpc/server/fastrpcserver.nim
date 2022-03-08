@@ -1,5 +1,6 @@
 import mcu_utils/inettypes
 import mcu_utils/inetqueues
+import mcu_utils/timeutils
 
 import router
 import ../servertypes
@@ -9,12 +10,19 @@ export router, servertypes, socketserver
 
 
 type 
+
+  UdpClientOpts = object
+    timeout: Millis
+    ts: Millis
+
   FastRpcOpts* = ref object
     router*: FastRpcRouter
     bufferSize*: int
     prefixMsgSize*: bool
+    defaultUdpTimeout*: int
     # inetQueue*: seq[InetMsgQueue]
     task*: Thread[FastRpcRouter]
+    udpRpcSubs*: Table[RpcSubId, UdpClientOpts]
 
 ## =================== Handle RPC Events =================== ##
 
@@ -66,6 +74,17 @@ proc fastRpcEventHandler*(
         subId = item.data[0]
         evt = item.data[1]
       router.subEventProcs[evt].subs[cid] = subId
+
+      case cid[].kind:
+      of InetClientType.clSocket:
+        discard "nothing todo"
+      of InetClientType.clAddress:
+        let defTimeout = srv.getOpts().defaultUdpTimeout.Millis
+        let uopts = UdpClientOpts(timeout: defTimeout, ts: millis())
+        srv.getOpts().udpRpcSubs[subid] = uopts
+      else:
+        raise newException(ValueError, "unhandled cid subscription: " & repr(cid))
+
   elif evt in router.subEventProcs:
     logDebug("fastRpcEventHandler:subEventProcs: ", repr(evt))
     # get event serializer and run it to get back the ParamsBuffer 
@@ -148,7 +167,7 @@ proc fastRpcTask*(router: FastRpcRouter) {.thread.} =
 
 proc postServerProcessor(srv: ServerInfo[FastRpcOpts], results: seq[ReadyKey]) =
   var item: InetMsgQueueItem 
-  let router = srv.impl.opts.router
+  let router = srv.getOpts().router
   while router.inQueue.tryRecv(item):
     let res = router.fastRpcExec(item)
     logDebug("fastrpcProcessor:processed:sent:res: ", repr(res))
@@ -157,13 +176,23 @@ proc postServerProcessor(srv: ServerInfo[FastRpcOpts], results: seq[ReadyKey]) =
   for evt, subcli in router.subEventProcs.pairs():
     var removes = newSeq[InetClientHandle]()
     for cid, subid in subcli.subs:
-      var found = false
-      for recFd, sock in srv.receivers:
-        if recFd in cid:
-          found = true
-          break
-      if not found:
-        logInfo("fastrpcprocessor:cleanup:cid:found:", cid, "cid:", repr(subid))
+      block cidCheck:
+        case cid[].kind:
+        of InetClientType.clSocket:
+          for recFd, sock in srv.receivers:
+            if recFd in cid:
+              break cidCheck
+        of InetClientType.clAddress:
+          discard "unhandled"
+          let uopts = srv.getOpts().udpRpcSubs[subid]
+          let curr = millis()
+          if uopts.ts < curr and (curr - uopts.ts) < uopts.timeout:
+            logInfo("fastrpcprocessor:cleanup:udp-subs:timeout:", uopts) 
+            break cidCheck
+        else:
+          discard "unhandled"
+        # otherwise remove it
+        logInfo("fastrpcprocessor:cleanup:cid:", cid, "subid:", repr(subid))
         removes.add cid
     for cid in removes:
       subcli.subs.del(cid)
