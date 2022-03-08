@@ -8,6 +8,7 @@ import ../socketserver
 
 export router, servertypes, socketserver
 
+import std/times
 
 type 
 
@@ -19,7 +20,7 @@ type
     router*: FastRpcRouter
     bufferSize*: int
     prefixMsgSize*: bool
-    defaultUdpTimeout*: int
+    udpTimeout*: Millis
     # inetQueue*: seq[InetMsgQueue]
     task*: Thread[FastRpcRouter]
     udpRpcSubs*: Table[RpcSubId, UdpClientOpts]
@@ -80,8 +81,7 @@ proc fastRpcEventHandler*(
         discard "nothing todo"
       of InetClientType.clAddress:
         logDebug("fastRpcEventHandler:sub:registering")
-        let defTimeout = srv.getOpts().defaultUdpTimeout.Millis
-        let uopts = UdpClientOpts(timeout: defTimeout, ts: millis())
+        let uopts = UdpClientOpts(timeout: srv.getOpts().udpTimeout, ts: millis())
         srv.getOpts().udpRpcSubs[subid] = uopts
       else:
         raise newException(ValueError, "unhandled cid subscription: " & repr(cid))
@@ -208,15 +208,18 @@ proc newFastRpcServer*(router: FastRpcRouter,
                        bufferSize = 1400,
                        prefixMsgSize = false,
                        threaded = false,
+                       udpTimeout = Millis(convert(Minutes, Milliseconds, 15)),
                        ): Server[FastRpcOpts] =
   new(result)
   result.readHandler = fastRpcReadHandler
   result.eventHandler = fastRpcEventHandler 
   result.writeHandler = nil 
+
   result.opts = FastRpcOpts(
     bufferSize: bufferSize,
     router: router,
-    prefixMsgSize: prefixMsgSize
+    prefixMsgSize: prefixMsgSize,
+    udpTimeout: udpTimeout
   )
 
   # result.opts.inetQueue = @[outQueue]
