@@ -44,10 +44,15 @@ proc fastRpcInetReplies*(
         lenBuf.toStrBe16(msg.data.len().int16)
         sock.sendSafe(lenBuf & msg.data)
     of clAddress:
-      var sfd = item.cid[].sfd
-      var sock = srv.receivers[sfd]
-      logDebug("fastRpcEventHandler:reply:udp: ", repr(item.cid), "sock:", repr sock.getFd())
-      logDebug("fastRpcEventHandler:reply:", "sock: ", repr(sock.getFd()))
+      let sfd = item.cid[].sfd
+      var fds = newSeq[SocketHandle]()
+      if sfd == SocketHandle -1:
+        for fid, rcvs in srv.receivers:
+          if rcvs.getProtocol() == Protocol.IPPROTO_UDP: fds.add(fid)
+      for fd in fds:
+        withReceiverSocket(sock, fd, "fasteventhandler"):
+          logDebug("fastRpcEventHandler:reply:udp:", repr(item.cid), "sock:", repr sock.getFd())
+          logDebug("fastRpcEventHandler:reply:", "sock: ", repr(sock.getFd()))
     of clCanBus:
       raise newException(Exception, "TODO: canbus sender")
     of clEmpty:
