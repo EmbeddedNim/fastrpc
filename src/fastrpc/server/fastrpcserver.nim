@@ -39,13 +39,15 @@ proc fastRpcInetReplies*(
     of clSocket:
       withReceiverSocket(sock, item.cid[].fd, "fasteventhandler"):
         var msg: MsgBuffer = item.data[]
-        logDebug("fastRpcEventHandler:sock: ", repr(sock.getFd()))
+        logDebug("fastRpcEventHandler:reply:", "sock: ", repr(sock.getFd()))
         var lenBuf = newString(2)
         lenBuf.toStrBe16(msg.data.len().int16)
         sock.sendSafe(lenBuf & msg.data)
     of clAddress:
-      var sock = srv.receivers[item.cid[].fd]
-      logDebug("fastRpcEventHandler:sock: ", repr(sock.getFd()))
+      var sfd = item.cid[].sfd
+      var sock = srv.receivers[sfd]
+      logDebug("fastRpcEventHandler:reply:udp: ", repr(item.cid), "sock:", repr sock.getFd())
+      logDebug("fastRpcEventHandler:reply:", "sock: ", repr(sock.getFd()))
     of clCanBus:
       raise newException(Exception, "TODO: canbus sender")
     of clEmpty:
@@ -129,7 +131,7 @@ proc fastRpcReadHandler*(
     clientId = newClientHandle(sock.getFd())
   elif stype == SockType.SOCK_DGRAM:
     discard sock.recvFrom(buffer[].data, buffer[].data.len(), host, port)
-    clientId  = newClientHandle(host, port)
+    clientId  = newClientHandle(host, port, sock.getFd())
   else:
     raise newException(ValueError, "unhandled socket type: " & $stype)
 
