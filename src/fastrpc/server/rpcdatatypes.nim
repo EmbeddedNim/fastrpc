@@ -1,6 +1,6 @@
 
 import std/tables, std/sets, std/macros, std/sysrand
-import std/sugar
+import std/sugar, std/options
 
 export sugar
 
@@ -21,6 +21,7 @@ export logging, msgpack4nim, msgpack2json
 
 import protocol
 export protocol
+export options
 
 
 type
@@ -93,6 +94,21 @@ proc newFastRpcRouter*(): FastRpcRouter =
   result.sysprocs = initTable[string, FastRpcProc]()
   result.subEventProcs = initTable[SelectEvent, RpcSubClients]()
   result.stacktraces = defined(debug)
+
+proc subscribe*(
+    router: FastRpcRouter,
+    procName: string,
+    clientId: InetClientHandle,
+): Option[RpcSubId] =
+  # rpcProc = router.procs.getOrDefault(req.procName)
+  let subid: RpcSubId = randBinString()
+  logDebug "fastrouter:subscribing::", procName, "subid:", subid
+  let val = (subid, router.subNames[procName])
+  var item =
+    isolate InetQueueItem[(RpcSubId, SelectEvent)].init(clientId, val)
+  if router.registerQueue.trySend(item):
+    result = some(subid)
+
 
 proc listMethods*(rt: FastRpcRouter): seq[string] =
   ## list the methods in the given router. 

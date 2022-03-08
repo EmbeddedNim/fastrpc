@@ -82,23 +82,18 @@ proc callMethod*(
     of Subscribe:
       # rpcProc = router.procs.getOrDefault(req.procName)
       echo "CALL:METHOD: SUBSCRIBE"
-      let subid: RpcSubId = randBinString()
       let hasSubProc = req.procname in router.subNames
       if not hasSubProc:
         let methodNotFound = req.procName & " is not a registered RPC method."
         return wrapResponseError(req.id, METHOD_NOT_FOUND,
                                  methodNotFound, nil,
                                  router.stacktraces)
-      let val = (subid, router.subNames[req.procName])
-      var item =
-        isolate InetQueueItem[(RpcSubId, SelectEvent)].init(clientId, val)
-      if router.registerQueue.trySend(item):
-        let resp = %* {"subscription": subid}
-        echo "CALL:METHOD:SUBSCRIBE:registerQueue:evt: ", repr router.registerQueue.evt
-        echo "CALL:METHOD:SUBSCRIBE:registerQueue:chan: ", repr router.registerQueue.chan.peek
-        echo "CALL:METHOD:SUBSCRIBE:resp: ", $resp
-        return FastRpcResponse(kind: Response, id: req.id,
-                                 result: resp.rpcPack())
+      let subId = router.subscribe(req.procName, clientId)
+      if subId.isSome():
+        let resp = %* {"subscription": subid.get()}
+        return FastRpcResponse(
+                  kind: Response, id: req.id,
+                  result: resp.rpcPack())
       else:
         return wrapResponseError(
                   req.id, INTERNAL_ERROR,

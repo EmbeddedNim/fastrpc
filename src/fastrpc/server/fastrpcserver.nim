@@ -52,8 +52,11 @@ proc fastRpcEventHandler*(
   logDebug("fastRpcEventHandler:loop")
 
   if evt == router.outQueue.evt:
+    # process outgoing inet replies 
     srv.fastRpcInetReplies(router.outQueue)
   elif evt == router.registerQueue.evt:
+    # process inputs on the "register queue"
+    # and add them to the sub-events table
     logDebug("fastRpcEventHandler:registerQueue: ", repr(evt))
     var item: InetQueueItem[(RpcSubId, SelectEvent)]
     while router.registerQueue.tryRecv(item):
@@ -65,8 +68,10 @@ proc fastRpcEventHandler*(
       router.subEventProcs[evt].subs[cid] = subId
   elif evt in router.subEventProcs:
     logDebug("fastRpcEventHandler:subEventProcs: ", repr(evt))
+    # get event serializer and run it to get back the ParamsBuffer 
     let subClient = router.subEventProcs[evt]
     let msg: FastRpcParamsBuffer = subClient.eventProc()
+    # now wrap response msg for each subscriber client 
     for cid, subid in subClient.subs:
       let resp: FastRpcResponse =
         wrapResponse(subid.FastRpcId, msg, kind=Publish)
@@ -148,6 +153,7 @@ proc postServerProcessor(srv: ServerInfo[FastRpcOpts], results: seq[ReadyKey]) =
     let res = router.fastRpcExec(item)
     logDebug("fastrpcProcessor:processed:sent:res: ", repr(res))
   
+  # Cleanup (garbage collect) the receivers and Client ID's 
   for evt, subcli in router.subEventProcs.pairs():
     var removes = newSeq[InetClientHandle]()
     for cid, subid in subcli.subs:
