@@ -190,7 +190,7 @@ proc postServerProcessor(srv: ServerInfo[FastRpcOpts], results: seq[ReadyKey]) =
           logDebug("fastrpcprocessor:cleanup:check:udp-subs:", repr uopts) 
           if uopts.timeout == Millis(-1): # unlimited udp subscription
             break cidCheck
-          elif uopts.ts < curr and (curr - uopts.ts) < uopts.timeout:
+          elif uopts.ts <= curr and (curr - uopts.ts) < uopts.timeout:
             logInfo("fastrpcprocessor:cleanup:udp-subs:timeout:", repr uopts) 
             break cidCheck
         else:
