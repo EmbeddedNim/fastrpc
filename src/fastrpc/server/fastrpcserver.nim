@@ -39,20 +39,22 @@ proc fastRpcInetReplies*(
     of clSocket:
       withReceiverSocket(sock, item.cid[].fd, "fasteventhandler"):
         var msg: MsgBuffer = item.data[]
-        logDebug("fastRpcEventHandler:reply:", "sock: ", repr(sock.getFd()))
+        logDebug("fastRpcEventHandler:reply:tcp:", "sock:", repr(sock.getFd()))
         var lenBuf = newString(2)
         lenBuf.toStrBe16(msg.data.len().int16)
         sock.sendSafe(lenBuf & msg.data)
     of clAddress:
-      let sfd = item.cid[].sfd
+      logDebug("fastRpcEventHandler:reply:udp:", repr(item.cid))
+      let cid = item.cid
+      var msg: MsgBuffer = item.data[]
       var fds = newSeq[SocketHandle]()
-      if sfd == SocketHandle -1:
+      if cid[].sfd == SocketHandle -1:
         for fid, rcvs in srv.receivers:
           if rcvs.getProtocol() == Protocol.IPPROTO_UDP: fds.add(fid)
       for fd in fds:
         withReceiverSocket(sock, fd, "fasteventhandler"):
-          logDebug("fastRpcEventHandler:reply:udp:", repr(item.cid), "sock:", repr sock.getFd())
-          logDebug("fastRpcEventHandler:reply:", "sock: ", repr(sock.getFd()))
+          logDebug("fastRpcEventHandler:reply:udp:", "sock:", repr(sock.getFd()))
+          sock.sendTo(cid[].host, cid[].port, msg.data)
     of clCanBus:
       raise newException(Exception, "TODO: canbus sender")
     of clEmpty:
