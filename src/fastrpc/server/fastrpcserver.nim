@@ -186,20 +186,9 @@ proc newFastRpcServer*(router: FastRpcRouter,
     prefixMsgSize: prefixMsgSize
   )
 
-  let
-    inQueue = InetMsgQueue.init(size=8)
-    outQueue = InetMsgQueue.init(size=8)
-    registerQueue = RpcSubIdQueue.init(size=8)
-  
-  result.opts.router.inQueue = inQueue
-  result.opts.router.outQueue = outQueue
-  result.opts.router.registerQueue = registerQueue
-
   # result.opts.inetQueue = @[outQueue]
-  result.events = @[
-    outQueue.evt,
-    registerQueue.evt,
-  ] 
+  result.events = @[router.outQueue.evt,
+                    router.registerQueue.evt] 
   for evt, subcli in router.subEventProcs:
     result.events.add evt
 

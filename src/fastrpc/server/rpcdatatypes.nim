@@ -95,6 +95,15 @@ proc newFastRpcRouter*(): FastRpcRouter =
   result.subEventProcs = initTable[SelectEvent, RpcSubClients]()
   result.stacktraces = defined(debug)
 
+  let
+    inQueue = InetMsgQueue.init(size=8)
+    outQueue = InetMsgQueue.init(size=8)
+    registerQueue = RpcSubIdQueue.init(size=8)
+  
+  result.inQueue = inQueue
+  result.outQueue = outQueue
+  result.registerQueue = registerQueue
+
 proc subscribe*(
     router: FastRpcRouter,
     procName: string,
