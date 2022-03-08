@@ -79,6 +79,7 @@ proc fastRpcEventHandler*(
       of InetClientType.clSocket:
         discard "nothing todo"
       of InetClientType.clAddress:
+        logDebug("fastRpcEventHandler:sub:registering")
         let defTimeout = srv.getOpts().defaultUdpTimeout.Millis
         let uopts = UdpClientOpts(timeout: defTimeout, ts: millis())
         srv.getOpts().udpRpcSubs[subid] = uopts
