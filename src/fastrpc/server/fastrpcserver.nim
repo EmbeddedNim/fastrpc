@@ -187,6 +187,7 @@ proc postServerProcessor(srv: ServerInfo[FastRpcOpts], results: seq[ReadyKey]) =
           discard "unhandled"
           let uopts = srv.getOpts().udpRpcSubs[subid]
           let curr = millis()
+          logDebug("fastrpcprocessor:cleanup:check:udp-subs:", uopts) 
           if uopts.timeout == Millis(-1): # unlimited udp subscription
             break cidCheck
           elif uopts.ts < curr and (curr - uopts.ts) < uopts.timeout:
