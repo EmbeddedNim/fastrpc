@@ -87,12 +87,13 @@ proc fastRpcEventHandler*(
     # process inputs on the "register queue"
     # and add them to the sub-events table
     logDebug("fastRpcEventHandler:registerQueue: ", repr(evt))
-    var item: InetQueueItem[(RpcSubId, SelectEvent)]
+    var item: InetQueueItem[(RpcSubId, SelectEvent, Millis)]
     while router.registerQueue.tryRecv(item):
       logDebug("fastRpcEventHandler:regQueue:cid: ", repr item.cid)
       let
         subId = item.data[0]
         evt = item.data[1]
+        timeout = item.data[2]
       var cid = item.cid
 
       case cid[].kind:
@@ -101,7 +102,7 @@ proc fastRpcEventHandler*(
       of InetClientType.clAddress:
         logDebug("fastRpcEventHandler:sub:registering")
         let to = -1.Millis
-        let uopts = UdpClientOpts(timeout: to, ts: millis())
+        let uopts = UdpClientOpts(timeout: timeout, ts: millis())
         srv.getOpts().udpRpcSubs[subid] = uopts
         var fds = newSeq[SocketHandle]()
         if cid[].sfd == SocketHandle -1:
