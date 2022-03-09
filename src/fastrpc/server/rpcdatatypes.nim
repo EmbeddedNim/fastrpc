@@ -45,7 +45,11 @@ type
   FastRpcAddressUnresolvableError* = object of ValueError
 
   RpcSubId* = int32
-  RpcSubIdQueue* = InetEventQueue[InetQueueItem[(RpcSubId, SelectEvent, Millis)]]
+  RpcSubOpts* = object
+    subid*: RpcSubId
+    evt*: SelectEvent
+    timeout*: Millis
+    source*: string
 
   RpcStreamSerializerClosure* = proc(): FastRpcParamsBuffer {.closure.}
 
@@ -62,7 +66,7 @@ type
     subscriptionTimeout*: Millis
     inQueue*: InetMsgQueue
     outQueue*: InetMsgQueue
-    registerQueue*: RpcSubIdQueue
+    registerQueue*: InetEventQueue[InetQueueItem[RpcSubOpts]]
 
 
 type
@@ -90,7 +94,11 @@ proc randBinString*(): RpcSubId =
   else:
     result = RpcSubId(0)
 
-proc newFastRpcRouter*(): FastRpcRouter =
+proc newFastRpcRouter*(
+    inQueueSize = 2,
+    outQueueSize = 2,
+    registerQueueSize = 2,
+): FastRpcRouter =
   new(result)
   result.procs = initTable[string, FastRpcProc]()
   result.sysprocs = initTable[string, FastRpcProc]()
@@ -98,9 +106,10 @@ proc newFastRpcRouter*(): FastRpcRouter =
   result.stacktraces = defined(debug)
 
   let
-    inQueue = InetMsgQueue.init(size=8)
-    outQueue = InetMsgQueue.init(size=8)
-    registerQueue = RpcSubIdQueue.init(size=8)
+    inQueue = InetMsgQueue.init(size=inQueueSize)
+    outQueue = InetMsgQueue.init(size=outQueueSize)
+    registerQueue =
+      InetEventQueue[InetQueueItem[RpcSubOpts]].init(size=registerQueueSize)
   
   result.inQueue = inQueue
   result.outQueue = outQueue
@@ -111,6 +120,7 @@ proc subscribe*(
     procName: string,
     clientId: InetClientHandle,
     timeout = -1.Millis,
+    source = "",
 ): Option[RpcSubId] =
   # send a request to fastrpcserver to subscribe a client to a subscription
   let 
@@ -119,9 +129,11 @@ proc subscribe*(
       else: router.subscriptionTimeout
   let subid: RpcSubId = randBinString()
   logDebug "fastrouter:subscribing::", procName, "subid:", subid
-  let val = (subid, router.subNames[procName], to)
-  var item =
-    isolate InetQueueItem[(RpcSubId, SelectEvent, Millis)].init(clientId, val)
+  let val = RpcSubOpts(subid: subid,
+                       evt: router.subNames[procName],
+                       timeout: to,
+                       source: source)
+  var item = isolate InetQueueItem[RpcSubOpts].init(clientId, val)
   if router.registerQueue.trySend(item):
     result = some(subid)
 
