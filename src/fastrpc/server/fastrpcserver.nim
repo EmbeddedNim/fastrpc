@@ -91,10 +91,11 @@ proc fastRpcEventHandler*(
     while router.registerQueue.tryRecv(item):
       logDebug("fastRpcEventHandler:regQueue:cid: ", repr item.cid)
       let opts = item.data
+      let cidEvt = opts.evt
       var cid = item.cid
       case cid[].kind:
       of InetClientType.clSocket:
-        router.subEventProcs[evt].subs[cid] = opts.subId
+        router.subEventProcs[cidEvt].subs[cid] = opts.subId
       of InetClientType.clAddress:
         logDebug("fastRpcEventHandler:sub:registering")
         let udpopts = UdpClientOpts(timeout: opts.timeout, ts: millis())
@@ -106,7 +107,8 @@ proc fastRpcEventHandler*(
           fds.add cid[].sfd
         for fd in fds:
           let cidFd = newClientHandle(cid[].host, cid[].port, fd, cid[].protocol)
-          router.subEventProcs[evt].subs[cidFd] = opts.subId
+          logDebug("fastRpcEventHandler:sub:registering:cid: ", repr cidFd)
+          router.subEventProcs[cidEvt].subs[cidFd] = opts.subId
       else:
         raise newException(ValueError, "unhandled cid subscription: " & repr(cid))
   elif evt in router.subEventProcs:

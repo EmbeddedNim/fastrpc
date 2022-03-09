@@ -122,12 +122,14 @@ when isMainModule:
   let inetAddrs = [
     newInetAddr("0.0.0.0", 5656, Protocol.IPPROTO_UDP),
     newInetAddr("0.0.0.0", 5656, Protocol.IPPROTO_TCP),
+    newInetAddr("::", 5555, Protocol.IPPROTO_UDP),
+    newInetAddr("::", 5555, Protocol.IPPROTO_TCP),
   ]
 
   echo "setup timer thread"
   var
     timer1q = TimerDataQ.init(10)
-    timerOpt = TimerOptions(delay: 100.Millis, count: 10)
+    timerOpt = TimerOptions(delay: 1_000.Millis, count: 10)
 
   var tchan: Chan[TimerOptions] = newChan[TimerOptions](1)
   var topt = TaskOption[TimerOptions](data: timerOpt, ch: tchan)
@@ -160,6 +162,11 @@ when isMainModule:
     option = timerOpt,
     optionRpcs = timerOptionsRpcs,
   )
+
+  let maddr = newClientHandle("ff12::1", 2048, -1.SocketHandle, net.IPPROTO_UDP)
+  logInfo "app_net_rpc:", "multicast-addr:", repr maddr
+  let mpub = router.subscribe("microspub", maddr, timeout = 0.Millis, source = "")
+  logInfo "app_net_rpc:", "multicast-publish:", repr mpub
 
   # print out all our new rpc's!
   for rpc in router.procs.keys():
