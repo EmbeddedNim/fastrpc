@@ -20,12 +20,26 @@ type
     router*: FastRpcRouter
     bufferSize*: int
     prefixMsgSize*: bool
-    udpTimeout*: Millis
     # inetQueue*: seq[InetMsgQueue]
     task*: Thread[FastRpcRouter]
     udpRpcSubs*: Table[RpcSubId, UdpClientOpts]
 
 ## =================== Handle RPC Events =================== ##
+
+proc findMatchingUdpSockets(
+    srv: ServerInfo[FastRpcOpts],
+    cid: InetClientHandle,
+): seq[SocketHandle] =
+  ## find matching sockets for a generic UDP subscription
+  ## like multicast subs. A bit ugly, but works for now. 
+  let cidDomain = 
+    if cid[].host.family == IPv6: Domain.AF_INET6
+    else: Domain.AF_INET
+  for fid, receiver in srv.receivers:
+    # check each receiver socket to find a matching UDP one
+    if receiver.getProtocol() == Protocol.IPPROTO_UDP:
+      if receiver.getDomain() == cidDomain:
+        result.add(receiver.getFd())
 
 proc fastRpcInetReplies*(
         srv: ServerInfo[FastRpcOpts],
@@ -48,9 +62,6 @@ proc fastRpcInetReplies*(
       let cid = item.cid
       var msg: MsgBuffer = item.data[]
       var fds = newSeq[SocketHandle]()
-      if cid[].sfd == SocketHandle -1:
-        for fid, rcvs in srv.receivers:
-          if rcvs.getProtocol() == Protocol.IPPROTO_UDP: fds.add(fid)
       for fd in fds:
         withReceiverSocket(sock, fd, "fasteventhandler"):
           logDebug("fastRpcEventHandler:reply:udp:", "sock:", repr(sock.getFd()))
@@ -80,21 +91,28 @@ proc fastRpcEventHandler*(
     while router.registerQueue.tryRecv(item):
       logDebug("fastRpcEventHandler:regQueue:cid: ", repr item.cid)
       let
-        cid = item.cid
         subId = item.data[0]
         evt = item.data[1]
-      router.subEventProcs[evt].subs[cid] = subId
+      var cid = item.cid
 
       case cid[].kind:
       of InetClientType.clSocket:
-        discard "nothing todo"
+        router.subEventProcs[evt].subs[cid] = subId
       of InetClientType.clAddress:
         logDebug("fastRpcEventHandler:sub:registering")
-        let uopts = UdpClientOpts(timeout: srv.getOpts().udpTimeout, ts: millis())
+        let to = -1.Millis
+        let uopts = UdpClientOpts(timeout: to, ts: millis())
         srv.getOpts().udpRpcSubs[subid] = uopts
+        var fds = newSeq[SocketHandle]()
+        if cid[].sfd == SocketHandle -1:
+          fds.add srv.findMatchingUdpSockets(cid)
+        else:
+          fds.add cid[].sfd
+        for fd in fds:
+          let cidFd = newClientHandle(cid[].host, cid[].port, fd, cid[].protocol)
+          router.subEventProcs[evt].subs[cidFd] = subId
       else:
         raise newException(ValueError, "unhandled cid subscription: " & repr(cid))
-
   elif evt in router.subEventProcs:
     logDebug("fastRpcEventHandler:subEventProcs: ", repr(evt))
     # get event serializer and run it to get back the ParamsBuffer 
@@ -193,7 +211,6 @@ proc postServerProcessor(srv: ServerInfo[FastRpcOpts], results: seq[ReadyKey]) =
             if recFd in cid:
               break cidCheck
         of InetClientType.clAddress:
-          discard "unhandled"
           let uopts = srv.getOpts().udpRpcSubs[subid]
           let curr = millis()
           logDebug("fastrpcprocessor:cleanup:check:udp-subs:", repr uopts) 
@@ -228,7 +245,6 @@ proc newFastRpcServer*(router: FastRpcRouter,
     bufferSize: bufferSize,
     router: router,
     prefixMsgSize: prefixMsgSize,
-    udpTimeout: udpTimeout
   )
 
   # result.opts.inetQueue = @[outQueue]

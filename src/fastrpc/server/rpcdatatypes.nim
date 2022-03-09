@@ -13,6 +13,7 @@ include mcu_utils/threads
 import mcu_utils/logging
 import mcu_utils/inettypes
 import mcu_utils/inetqueues
+import mcu_utils/basictypes
 
 import msgpack4nim
 import msgpack4nim/msgpack2json
@@ -44,7 +45,7 @@ type
   FastRpcAddressUnresolvableError* = object of ValueError
 
   RpcSubId* = int32
-  RpcSubIdQueue* = InetEventQueue[InetQueueItem[(RpcSubId, SelectEvent)]]
+  RpcSubIdQueue* = InetEventQueue[InetQueueItem[(RpcSubId, SelectEvent, Millis)]]
 
   RpcStreamSerializerClosure* = proc(): FastRpcParamsBuffer {.closure.}
 
@@ -58,6 +59,7 @@ type
     subEventProcs*: Table[SelectEvent, RpcSubClients]
     subNames*: Table[string, SelectEvent]
     stacktraces*: bool
+    subscriptionTimeout*: Millis
     inQueue*: InetMsgQueue
     outQueue*: InetMsgQueue
     registerQueue*: RpcSubIdQueue
@@ -108,16 +110,20 @@ proc subscribe*(
     router: FastRpcRouter,
     procName: string,
     clientId: InetClientHandle,
+    timeout = -1.Millis,
 ): Option[RpcSubId] =
-  # rpcProc = router.procs.getOrDefault(req.procName)
+  # send a request to fastrpcserver to subscribe a client to a subscription
+  let 
+    to =
+      if timeout != -1.Millis: timeout
+      else: router.subscriptionTimeout
   let subid: RpcSubId = randBinString()
   logDebug "fastrouter:subscribing::", procName, "subid:", subid
-  let val = (subid, router.subNames[procName])
+  let val = (subid, router.subNames[procName], to)
   var item =
-    isolate InetQueueItem[(RpcSubId, SelectEvent)].init(clientId, val)
+    isolate InetQueueItem[(RpcSubId, SelectEvent, Millis)].init(clientId, val)
   if router.registerQueue.trySend(item):
     result = some(subid)
-
 
 proc listMethods*(rt: FastRpcRouter): seq[string] =
   ## list the methods in the given router. 
