@@ -60,12 +60,10 @@ proc fastRpcInetReplies*(
     of clAddress:
       logDebug("fastRpcEventHandler:reply:udp:", repr(item.cid))
       let cid = item.cid
-      var msg: MsgBuffer = item.data[]
-      var fds = newSeq[SocketHandle]()
-      for fd in fds:
-        withReceiverSocket(sock, fd, "fasteventhandler"):
-          logDebug("fastRpcEventHandler:reply:udp:", "sock:", repr(sock.getFd()))
-          sock.sendTo(cid[].host, cid[].port, msg.data)
+      withReceiverSocket(sock, item.cid[].sfd, "fasteventhandler"):
+        var msg: MsgBuffer = item.data[]
+        logDebug("fastRpcEventHandler:reply:udp:", "sock:", repr(sock.getFd()))
+        sock.sendTo(cid[].host, cid[].port, msg.data)
     of clCanBus:
       raise newException(Exception, "TODO: canbus sender")
     of clEmpty:
