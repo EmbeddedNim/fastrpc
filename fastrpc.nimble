@@ -14,6 +14,7 @@ requires "stew >= 0.1.0"
 requires "progress >= 0.1.0"
 requires "msgpack4nim >= 0.3.1"
 requires "threading >= 0.1.0"
+requires "cligen >= 0.1.0"
 requires "https://github.com/EmbeddedNim/mcu_utils.git#main"
 
 task build_integration_tests, "build integration test tools":
