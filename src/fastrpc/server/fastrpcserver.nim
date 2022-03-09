@@ -210,7 +210,7 @@ proc postServerProcessor(srv: ServerInfo[FastRpcOpts], results: seq[ReadyKey]) =
           let uopts = srv.getOpts().udpRpcSubs[subid]
           let curr = millis()
           logDebug("fastrpcprocessor:cleanup:check:udp-subs:", repr uopts) 
-          if uopts.timeout == Millis(-1): # unlimited udp subscription
+          if uopts.timeout == Millis(0): # unlimited udp subscription
             break cidCheck
           elif uopts.ts <= curr and (curr - uopts.ts) < uopts.timeout:
             logInfo("fastrpcprocessor:cleanup:udp-subs:timeout:", repr uopts) 
