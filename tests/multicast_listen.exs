@@ -1,3 +1,5 @@
+Mix.install [:msgpax]
+
 defmodule UdpThing do
 
   # nc -6 -u ff12::1%en3 1
@@ -7,7 +9,8 @@ defmodule UdpThing do
   @ip6_drop_membership [macos: 13, bsd: 13, linux: 21]
 
   def ipv6_to_binary(ipv6addressstr) when is_binary(ipv6addressstr) do
-    {:ok, {n1,n2,n3,n4,n5,n6,n7,n8}} = :inet_parse.ipv6strict_address(ipv6addressstr |> :erlang.binary_to_list)
+    {:ok, {n1,n2,n3,n4,n5,n6,n7,n8}} =
+      :inet_parse.ipv6strict_address(ipv6addressstr |> :erlang.binary_to_list)
     <<n1::16, n2::16, n3::16, n4::16, n5::16, n6::16, n7::16, n8::16>>
   end
 
@@ -33,8 +36,17 @@ defmodule UdpThing do
 
   def loop() do
     receive do
-      msg ->
-        :io.format("got: ~w ~n", [msg])
+      pkt ->
+        {:udp, _pid, ip6addr, _port, msg} = pkt
+        try do
+          msg! = msg |> Msgpax.unpack!()
+          # :io.format("got msg: ~w ~n", [msg!])
+          IO.inspect(msg!, label: :msg)
+        rescue
+          err ->
+            :io.format("got pkt: ~w ~n", [msg])
+        end
+        IO.puts ""
     end
     loop()
   end
