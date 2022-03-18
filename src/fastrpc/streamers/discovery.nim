@@ -99,3 +99,28 @@ proc discoveryThread*(arg: ThreadArg[Millis, DiscoveryOptions]) {.thread, nimcal
   logInfo "discovery thread:", repr(arg.opt.data)
   discoveryStreamer(arg.queue, arg.opt)
 
+
+proc initDiscovery*(
+    router: var FastRpcRouter,
+    thr: var RpcStreamThread[Millis, DiscoveryOptions], 
+    delay: Millis,
+    servicePort: Port,
+): RpcStreamThread[Millis, DiscoveryOptions] = 
+  ## setup the ads131 data streamer, register it to the router, and start the thread.
+  var
+    discQueue = InetEventQueue[Millis].init(2)
+    opts = DiscoveryOptions(delay: delay, servicePort: servicePort)
+    chan: Chan[DiscoveryOptions] = newChan[DiscoveryOptions](2)
+    taskOpts = TaskOption[DiscoveryOptions](data: opts, ch: chan)
+    targ = ThreadArg[Millis,DiscoveryOptions](queue: discQueue, opt: taskOpts)
+
+  result.createThread(discoveryThread, move targ)
+
+  router.registerDataStream(
+    "discovery",
+    serializer = discoverySerializer,
+    reducer = discoveryStreamer,
+    queue = discQueue,
+    option = opts,
+    optionRpcs = discoveryOptionsRpcs,
+  )
