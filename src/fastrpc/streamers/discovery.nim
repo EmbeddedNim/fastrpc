@@ -22,6 +22,7 @@ type
     linkLocal*: array[16, uint8]
 
   DiscoveryOptions* {.rpcOption.} = object
+    identifier*: string
     delay*: Millis
     servicePort*: Port
 
@@ -65,7 +66,7 @@ proc discoveryStreamer*(
 
       {.cast(gcsafe).}:
         discovery = DiscoveryData(
-          identifier: "",
+          identifier: data.identifier,
           fwversion: [1, 0, 0],
           servicePort: data.servicePort.int,
           linkLocal: lladdr.address_v6,
@@ -103,13 +104,14 @@ proc discoveryThread*(arg: ThreadArg[Millis, DiscoveryOptions]) {.thread, nimcal
 proc initDiscoveryStreamer*(
     router: var FastRpcRouter,
     thr: var RpcStreamThread[Millis, DiscoveryOptions],
+    identifier: string,
     delay: Millis,
     servicePort: Port,
 ) = 
   ## setup the ads131 data streamer, register it to the router, and start the thread.
   var
     discQueue = InetEventQueue[Millis].init(2)
-    opts = DiscoveryOptions(delay: delay, servicePort: servicePort)
+    opts = DiscoveryOptions(delay: delay, servicePort: servicePort, identifier: identifier)
     chan: Chan[DiscoveryOptions] = newChan[DiscoveryOptions](2)
     taskOpts = TaskOption[DiscoveryOptions](data: opts, ch: chan)
     targ = ThreadArg[Millis,DiscoveryOptions](queue: discQueue, opt: taskOpts)
