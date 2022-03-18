@@ -100,7 +100,7 @@ proc discoveryThread*(arg: ThreadArg[Millis, DiscoveryOptions]) {.thread, nimcal
   discoveryStreamer(arg.queue, arg.opt)
 
 
-proc initDiscovery*(
+proc initDiscoveryStreamer*(
     router: var FastRpcRouter,
     thr: var RpcStreamThread[Millis, DiscoveryOptions], 
     delay: Millis,
