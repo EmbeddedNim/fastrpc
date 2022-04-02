@@ -42,6 +42,17 @@ defmodule UdpThing do
           msg! = msg |> Msgpax.unpack!()
           # :io.format("got msg: ~w ~n", [msg!])
           IO.inspect(msg!, label: :msg)
+          [10, _id, %{"linkLocal" => ipnums}] = msg!
+
+          ipbs = ipnums |> :erlang.list_to_binary()
+          ipgs = for <<group::16 <- ipbs >> do group end
+          ip = ipgs |> List.to_tuple()
+          ipstr = ip |> :inet.ntoa() |> to_string()
+
+          # :io.format("IP: ~w ~n", [ipstr])
+
+          IO.inspect(msg!, label: :msg)
+          IO.inspect(ipstr, label: :IPSTR)
         rescue
           err ->
             :io.format("got pkt: ~w ~n", [msg])
