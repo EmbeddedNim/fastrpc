@@ -7,6 +7,7 @@ import options
 import mcu_utils/logging
 import mcu_utils/msgbuffer
 import mcu_utils/inettypes
+include mcu_utils/threads
 
 import server/rpcdatatypes
 
