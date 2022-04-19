@@ -9,7 +9,7 @@ srcDir        = "src"
 
 # Dependencies
 
-requires "nim >= 1.6.6"
+requires "nim >= 1.6.5"
 requires "stew >= 0.1.0"
 requires "progress >= 0.1.0"
 requires "msgpack4nim >= 0.3.1"
