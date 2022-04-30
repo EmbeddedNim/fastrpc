@@ -16,9 +16,9 @@ defmodule UdpThing do
 
   @maddr <<65298::16, 0::16, 0::16, 0::16, 0::16, 0::16, 0::16, 1::16>>
 
-  def run(os \\ :linux, eth \\ "eth0") do
+  def run(os \\ :linux, eth \\ "eth0", maddr \\ "ff12::1") do
     port = 2048
-    maddr = ipv6_to_binary("ff12::1")
+    maddr = ipv6_to_binary(maddr)
     IO.inspect maddr, label: :MADDR
     {:ok, ifindx} = :net.if_name2index(eth |> :erlang.binary_to_list)
     IO.inspect eth, label: :ETH
@@ -41,7 +41,7 @@ defmodule UdpThing do
         try do
           msg! = msg |> Msgpax.unpack!()
           # :io.format("got msg: ~w ~n", [msg!])
-          IO.inspect(msg!, label: :msg)
+          IO.inspect(msg!, label: :msg, width: 0)
           [10, _id, %{"linkLocal" => ipnums}] = msg!
 
           ipbs = ipnums |> :erlang.list_to_binary()
@@ -51,11 +51,11 @@ defmodule UdpThing do
 
           # :io.format("IP: ~w ~n", [ipstr])
 
-          IO.inspect(msg!, label: :msg)
+          # IO.inspect(msg!, label: :msg, width: 0)
           IO.inspect(ipstr, label: :IPSTR)
         rescue
           err ->
-            :io.format("got pkt: ~w ~n", [msg])
+            # :io.format("got pkt: ~w ~n", [msg])
         end
         IO.puts ""
     end
@@ -67,5 +67,9 @@ ifidx =
   (System.get_env("IFIDX") || System.argv() |> Enum.at(0))
   |> IO.inspect(label: :IFIDX)
 
-UdpThing.run(:linux, ifidx)
+maddr =
+  (System.get_env("MADDR") || System.argv() |> Enum.at(1) || "ff12::1")
+  |> IO.inspect(label: :MADDR)
+
+UdpThing.run(:linux, ifidx, maddr)
 # UdpThing.run(:macos, "en0")
