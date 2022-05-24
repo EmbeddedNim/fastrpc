@@ -51,7 +51,7 @@ The fields are:
 
 1. `resptype: int8` response message type
 2. `msgid: int32` sequence number for client to track responses, including async/streams
-3. `result: MsgPackNodes` Arbitray packed MsgPack (CBOR) data
+3. `result: MsgPackNodes` Arbitray packed MsgPack data
 
 
 The supported types of responses are:
@@ -130,6 +130,10 @@ In the future clients can send `SubscribeStop` with RPC name and `subscription i
 
 
 ## Notes 
+
+### Alternative Packing
+
+It would be possible to use this RPC Protocol with CBOR as the serialization protocol. Everything above would apply but instread using CBOR. 
 
 ### Using Streams with Framing
 
