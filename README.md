@@ -25,7 +25,7 @@ The request message is a four element array as shown below, packed in MessagePac
 
 The fields are:
 
-1. `reqtype: int8` request message type (current valid request values are `5,7,9,18`)
+1. `reqtype: int8` request message type (current valid request values are `5,7,9,19`)
 2. `msgid: int32` sequence number for client to track (async) responses
 3. `procName: string` name of the procedure (method) to call
 4. `params: array[MsgPackNodes]` an array of parameters of arbitrary MsgPack data. 
