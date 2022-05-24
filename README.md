@@ -9,26 +9,13 @@ The FastRPC protocol is based on a variant of [MessagePack-RPC](https://github.c
 
 ### MessagePack-RPC Protocol specification
 
-The protocol consists of `Request` message and the corresponding `Response` message. The server must send a `Response` message in reply to the `Request` message. 
+The general protocol consists of `Request` messages and corresponding `Response` message(s). The server must send a `Response` message in reply to a request unless the request type indicates that no response is expected. In the simplest case a resposne with empty data is useable as an ack. 
 
-#### Packet Types and Framing
+The server implementation also assumes that each packet can fit into the physical media's [MTU](https://en.wikipedia.org/wiki/Maximum_transmission_unit). On Ethernet this is generally 1500 bytes less the space used by the UDP (or TCP) packets. While WiFI [802.11 MTU](https://networkengineering.stackexchange.com/questions/32970/what-is-the-802-11-mtu) is 2304 bytes with various overheads depending on the security settings. The smallest use case is probably [CAN-FD](https://en.wikipedia.org/wiki/CAN_FD) which is 64 bytes (that's the large one). 
 
-This library supports both UDP and TCP, depending what the library user wants. The client will need to know ahead of time whether the server supports TCP or UDP and their ports.
+#### `Request` Messages
 
-Currently UDP packets make no guarantees of delivery and is up to the RPC api to handle. It's recommended to have idempotent API's in this scenario.
-
-
-##### TCP Packets and Framing
-
-When using TCP connections a simple framing scheme is used to delineate messages. Each message must be prefixed by a bye-length in big-endian order. This is copied from [Erlang port protocol](https://www.erlang.org/doc/tutorial/c_port.html) for similar reasons.
-
-Note: The default prefix length is 2-byte for messages up to ~65k in length, however, MCUs generally don't gracefully handle packets larger than transport frame size (e.g. ~1400 bytes on ethernet).
-
-In theory, websocket framing could be used but isn't. 
-
-#### `Request` Message
-
-The request message is a four element array as shown below, packed in MessagePack (CBOR) format.
+The request message is a four element array as shown below, packed in MessagePack format.
 
 ```nim
   [reqtype, msgid, procName, params]
@@ -50,7 +37,7 @@ The supported types of requests are:
 
 Note: `params` **must** be an array. Passing maps will return an error. This is to optimize deserialization in static languages. The params in the array match the order of the arguments in a function call which is very fast to parse. Maps would require handling out-of-order fields. 
 
-#### `Response` Message
+#### `Response` Messages
 
 The request message is a three element array as shown below, packed in MessagePack (CBOR) format.
 
@@ -60,8 +47,8 @@ The request message is a three element array as shown below, packed in MessagePa
 
 The fields are:
 
-1. `resptype: int8` response message type (current valid response values are ``)
-2. `msgid: int32` sequence number for client to track (async) responses
+1. `resptype: int8` response message type
+2. `msgid: int32` sequence number for client to track responses, including async/streams
 3. `result: MsgPackNodes` Arbitray packed MsgPack (CBOR) data
 
 
@@ -71,13 +58,13 @@ The supported types of responses are:
 - `Publish = 10`
 - `PublishDone = 12`
 
-Note: the `result` type is used to store errors when the response type is `Error (8)`.
+Note: the `result` field is used to store errors when the response type is `Error (8)`.
 
 #### Basic Request Lifecycle
 
 The client will send a `Request` packet to the server. When UDP is used the server will respond to the same UDP source IP & Port. TCP clients will first need to initialize the socket. 
 
-The server will process the RPC proc and return a `Response` message, unless it encounters and error where the `Error` response type will be sent. It's up to the client to handle these as desired. A `Response` request should expect response. 
+The server will process the RPC proc and return a `Response` message, unless it encounters an error where the `Error` response type will be sent. It's up to the client to handle these as desired. 
 
 The `SystemRequest` is identical to `Request` except that is supports server specific *system* calls. By default this includes methods like `listall` that return all RPC methods handled by the server. API's like *reboot* should likely be a `SystemRequest`. The server may want to require extra security tokens for this case. 
 
@@ -128,3 +115,16 @@ assert response == [Response, 1, 3]
 let answer = 3
 assert answer == response[2]
 ```
+
+## Notes 
+
+### Using Streams with Framing
+
+When using TCP, Unix domain sockets, serial, or other stream based connections a simple framing scheme is used to delineate messages. Each message must be prefixed by a bye-length in big-endian order. This is copied from [Erlang port protocol](https://www.erlang.org/doc/tutorial/c_port.html) for similar reasons.
+
+Note: The default prefix length is 2-byte for messages up to ~65k in length, however, MCUs generally don't gracefully handle packets larger than transport frame size (e.g. ~1400 bytes on ethernet).
+
+In theory, websocket framing could be used but isn't. 
+
+This method of framing isn't optimal for noisy data streams such as serial connections, though using timeouts and resets it'd be possible to retry RPC calls over it. 
+
