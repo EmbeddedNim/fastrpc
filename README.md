@@ -20,13 +20,13 @@ The server implementation generally assumes that each packet can fit into the ph
 The request message is a four element array as shown below, packed in MessagePack format.
 
 ```nim
-  [reqtype, msgid, procName, params]
+  [reqType, msgId, procName, params]
 ```
 
 The fields are:
 
-1. `reqtype: int8` request message type (current valid request values are `5,7,9,19`)
-2. `msgid: int32` sequence number for client to track (async) responses
+1. `reqType: int8` request message type (current valid request values are `5,7,9,19`)
+2. `msgId: int32` sequence number for client to track (async) responses
 3. `procName: string` name of the procedure (method) to call
 4. `params: array[MsgPackNodes]` an array of parameters of arbitrary MsgPack data. 
 
@@ -37,20 +37,20 @@ The supported types of requests are:
 - `SubscribeStop  = 11`
 - `System = 19`
 
-Note: `params` **must** be an array. Passing maps will return an error. The params in the array match the order of the arguments in a function call which is very fast to parse. Maps could be handled but would require handling out-of-order fields and strings which can be noticebly slower. 
+Note: `params` **must** be an array. Passing maps will return an error. The params in the array match the order of the arguments in a function call which is very fast to parse. Maps could be handled but would require handling out-of-order fields and strings which requires more overhead. 
 
 #### `Response` Messages
 
 Response messages are a three element array as shown below, packed in MsgPack format.
 
 ```nim
-  [resptype, msgid, result]
+  [respType, msgId, result]
 ```
 
 The fields are:
 
-1. `resptype: int8` response message type
-2. `msgid: int32` sequence number for client to track responses, including async/streams
+1. `respType: int8` response message type
+2. `msgId: int32` sequence number for client to track responses, including async/streams
 3. `result: MsgPackNodes` Arbitray packed MsgPack data
 
 
@@ -83,11 +83,11 @@ To call `add(int, int)` on a FastRPC server, you'd generate a `Request` message:
 ```nim
 const Request = 5
 var callId = 1
-var msg = [Request, callId, "add", [1,2]]
-assert msg == [5, 1, "add", [1,2]]
+var msg = (Request, callId, "add", (1,2)) 
+assert msg == (5, 1, "add", (1,2))
 ```
 
-This would then be serialized using a MsgPack library (or CBOR in the future):
+This would then be serialized using a MsgPack library:
 
 ```nim
 var msgbinary = msgpack4nim.pack(msg)
@@ -95,19 +95,9 @@ assert msgbinary == "\148\5\1\163add\146\1\2"
 assert msgbinary == "\x94\x05\x01\xA3add\x92\x01\x02" # hex format
 ```
 
-When using TCP transport you'd need to prefix the message length:
-```nim
-var tcpMsgBinary = msgbinary.len().toBeInt16() & msgbinary
-assert msgbinary == "\0\10" & "\148\5\1\163add\146\1\2"
-assert msgbinary == "\0\10\148\5\1\163add\146\1\2"
-```
-
 The response message would be:
 ```nim
-var tcpResponseMsg = "\0\4\147\6\1\3"
-var responseMsg = rcpResponseMsg[2..^1] # slice off prefix
 assert responseMsg == "\147\6\1\3"
-
 var response = msgpack4nim.unpack(responseMsg)
 
 assert response == [6, 1, 3]
@@ -117,6 +107,28 @@ let answer = 3
 assert answer == response[2]
 ```
 
+When using a stream transport you'd need to prefix the message length:
+```nim
+var tcpMsgBinary = msgbinary.len().toBeInt16() & msgbinary
+assert msgbinary == "\0\10" & "\148\5\1\163add\146\1\2"
+assert msgbinary == "\0\10\148\5\1\163add\146\1\2"
+```
+
+The stream response (TCP) message would be:
+```nim
+var tcpResponseMsg = "\0\4\147\6\1\3"
+var responseLen = rcpResponseMsg[0..1] # get byte size prefix
+var responseMsg = rcpResponseMsg[2..^1] # slice off byte size prefix
+assert responseMsg == "\147\6\1\3"
+```
+
+Note that reading from a stream with BSD sockets requires using an idiom like: 
+```nim
+var pktLen = socket.read(2)
+var msg = ""
+while msg.len() < pktLen:
+  msg.add socket.read(pktLen - msg.len())
+```
 
 ### Subscriptions
 
