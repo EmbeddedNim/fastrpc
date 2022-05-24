@@ -114,22 +114,6 @@ assert msgbinary == "\0\10" & "\148\5\1\163add\146\1\2"
 assert msgbinary == "\0\10\148\5\1\163add\146\1\2"
 ```
 
-The stream response (TCP) message would be:
-```nim
-var tcpResponseMsg = "\0\4\147\6\1\3"
-var responseLen = rcpResponseMsg[0..1] # get byte size prefix
-var responseMsg = rcpResponseMsg[2..^1] # slice off byte size prefix
-assert responseMsg == "\147\6\1\3"
-```
-
-Note that reading from a stream with BSD sockets requires using an idiom like: 
-```nim
-var pktLen = socket.read(2)
-var msg = ""
-while msg.len() < pktLen:
-  msg.add socket.read(pktLen - msg.len())
-```
-
 ### Subscriptions
 
 TODO: these function but need work finish describing the API and how to use them
@@ -155,5 +139,22 @@ Note: The default prefix length is 2-byte for messages up to ~65k in length, how
 
 In theory, websocket framing could be used but isn't. 
 
-This method of framing isn't optimal for noisy data streams such as serial connections, though using timeouts and resets it'd be possible to retry RPC calls over it. 
+This method of framing isn't optimal for noisy data streams such as serial connections, though using timeouts and resets it'd be possible to retry RPC calls over it. In this case you may want to investigate something like [SLIP](https://en.wikipedia.org/wiki/Serial_Line_Internet_Protocol) that provides a more resiliant packeting mechanism.
 
+#### Stream (TCP) Framing Example
+
+The stream response (TCP) message would be:
+```nim
+var tcpResponseMsg = "\0\4\147\6\1\3"
+var responseLen = rcpResponseMsg[0..1] # get byte size prefix
+var responseMsg = rcpResponseMsg[2..^1] # slice off byte size prefix
+assert responseMsg == "\147\6\1\3"
+```
+
+Note that reading from a stream with BSD sockets requires using an idiom like: 
+```nim
+var pktLen = socket.read(2)
+var msg = ""
+while msg.len() < pktLen:
+  msg.add socket.read(pktLen - msg.len())
+```
