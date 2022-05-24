@@ -6,14 +6,14 @@ Generally it's intended to support datagram transports, but an optional framing 
 
 ## FastRPC Protocol
 
-The FastRPC protocol is based on a variant of [MessagePack-RPC](https://github.com/msgpack-rpc/msgpack-rpc/blob/master/spec.md) however it has several incompatible changes partially to simplify implementation on microcontrollers. 
+The FastRPC protocol is based on a variant of [MessagePack-RPC](https://github.com/msgpack-rpc/msgpack-rpc/blob/master/spec.md) however it has several incompatible changes partially to simplify implementation on microcontrollers.
 
 
 ### MessagePack-RPC Protocol specification
 
-The general protocol consists of `Request` messages and corresponding `Response` message(s). The server must send a `Response` message in reply to a request unless the request type indicates that no response is expected. In the simplest case a response with empty data (MsgPack nil type, 0xC0) can be used as an ack. 
+The general protocol consists of `Request` messages and corresponding `Response` message(s). The server must send a `Response` message in reply to a request unless the request type indicates that no response is expected.
 
-The server implementation generally assumes that each packet can fit into the physical media's [MTU](https://en.wikipedia.org/wiki/Maximum_transmission_unit). On Ethernet this is generally 1500 bytes less the space used by the UDP (or TCP) packets. While WiFI [802.11 MTU](https://networkengineering.stackexchange.com/questions/32970/what-is-the-802-11-mtu) is 2304 bytes with various overheads depending on the security settings. The smallest use case is probably [CAN-FD](https://en.wikipedia.org/wiki/CAN_FD) which is 64 bytes (that's the large one). This can be configured. 
+The server implementation generally assumes that each packet can fit into the physical media's [MTU](https://en.wikipedia.org/wiki/Maximum_transmission_unit). On Ethernet this is generally 1500 bytes less the space used by the UDP (or TCP) packets. While WiFI [802.11 MTU](https://networkengineering.stackexchange.com/questions/32970/what-is-the-802-11-mtu) is 2304 bytes with various overheads depending on the security settings. The smallest use case is probably [CAN-FD](https://en.wikipedia.org/wiki/CAN_FD) which is 64 bytes (that's the large one). This can be configured.
 
 #### `Request` Messages
 
@@ -27,8 +27,8 @@ The fields are:
 
 1. `reqtype: int8` request message type (current valid request values are `5,7,9,18`)
 2. `msgid: int32` sequence number for client to track (async) responses
-3. `procName: string` name of the procedure (method) to call 
-4. `params: array[MsgPackNodes]` an array of parameters. Arbitray packed MsgPack (CBOR) data matching the method definition. 
+3. `procName: string` name of the procedure (method) to call
+4. `params: array[MsgPackNodes]` an array of parameters of arbitrary MsgPack data. 
 
 The supported types of requests are:
 - `Request = 5`
@@ -37,11 +37,11 @@ The supported types of requests are:
 - `SubscribeStop  = 11`
 - `System = 19`
 
-Note: `params` **must** be an array. Passing maps will return an error. This is to optimize deserialization in static languages. The params in the array match the order of the arguments in a function call which is very fast to parse. Maps would require handling out-of-order fields. 
+Note: `params` **must** be an array. Passing maps will return an error. The params in the array match the order of the arguments in a function call which is very fast to parse. Maps could be handled but would require handling out-of-order fields and strings which can be noticebly slower. 
 
 #### `Response` Messages
 
-The request message is a three element array as shown below, packed in MessagePack (CBOR) format.
+Response messages are a three element array as shown below, packed in MsgPack format.
 
 ```nim
   [resptype, msgid, result]
