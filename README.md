@@ -2,6 +2,8 @@
 
 FastRPC is a both a library and a RPC protocol specification written in portable Nim code. The RPC protocol uses MessagePack (or CBOR) with goals to be portable, relatively lightweight, and fast as possible. The code can run on Zephyr or FreeRTOS/LwIP while also capable and tested to run on Linux (not other *nixs currently). 
 
+Generally it's intended to support datagram transports, but an optional framing (see Notes below) mechanism can be used to work with stream based transports.
+
 ## FastRPC Protocol
 
 The FastRPC protocol is based on a variant of [MessagePack-RPC](https://github.com/msgpack-rpc/msgpack-rpc/blob/master/spec.md) however it has several incompatible changes partially to simplify implementation on microcontrollers. 
@@ -9,9 +11,9 @@ The FastRPC protocol is based on a variant of [MessagePack-RPC](https://github.c
 
 ### MessagePack-RPC Protocol specification
 
-The general protocol consists of `Request` messages and corresponding `Response` message(s). The server must send a `Response` message in reply to a request unless the request type indicates that no response is expected. In the simplest case a resposne with empty data is useable as an ack. 
+The general protocol consists of `Request` messages and corresponding `Response` message(s). The server must send a `Response` message in reply to a request unless the request type indicates that no response is expected. In the simplest case a response with empty data (MsgPack nil type, 0xC0) can be used as an ack. 
 
-The server implementation also assumes that each packet can fit into the physical media's [MTU](https://en.wikipedia.org/wiki/Maximum_transmission_unit). On Ethernet this is generally 1500 bytes less the space used by the UDP (or TCP) packets. While WiFI [802.11 MTU](https://networkengineering.stackexchange.com/questions/32970/what-is-the-802-11-mtu) is 2304 bytes with various overheads depending on the security settings. The smallest use case is probably [CAN-FD](https://en.wikipedia.org/wiki/CAN_FD) which is 64 bytes (that's the large one). 
+The server implementation generally assumes that each packet can fit into the physical media's [MTU](https://en.wikipedia.org/wiki/Maximum_transmission_unit). On Ethernet this is generally 1500 bytes less the space used by the UDP (or TCP) packets. While WiFI [802.11 MTU](https://networkengineering.stackexchange.com/questions/32970/what-is-the-802-11-mtu) is 2304 bytes with various overheads depending on the security settings. The smallest use case is probably [CAN-FD](https://en.wikipedia.org/wiki/CAN_FD) which is 64 bytes (that's the large one). This can be configured. 
 
 #### `Request` Messages
 
@@ -68,7 +70,6 @@ The server will process the RPC proc and return a `Response` message, unless it 
 
 The `SystemRequest` is identical to `Request` except that is supports server specific *system* calls. By default this includes methods like `listall` that return all RPC methods handled by the server. API's like *reboot* should likely be a `SystemRequest`. The server may want to require extra security tokens for this case. 
 
-Subscriptions: *TODO*
 
 #### Protocol Semantics / Other Details
 
@@ -115,6 +116,18 @@ assert response == [Response, 1, 3]
 let answer = 3
 assert answer == response[2]
 ```
+
+
+### Subscriptions
+
+TODO: these function but need work finish describing the API and how to use them
+
+Subscription semantics have been added using the `Subscribe` and `Publish` request types described above. These requests work differently than the regular `Request` kinds. The request type needs to be `Subscribe` with the RPC name and any arguements for starting a subscription stream. The return type isn't a normal RPC response but a response from the server that returns a `subscription id` (`SubId` in the code) if the subscription succeeded. TODO: describe the data format for the `subscription id`. 
+
+Any responses from this subscription will use the `subscription id` instead of the original `msgid`. Multiple client's can subscribe to the _same_ stream in this way. It also works well with multicast stream data. 
+
+In the future clients can send `SubscribeStop` with RPC name and `subscription id` as the data to stop the stream. The server can also send a `PublishDone` response to indicate to the client that the stream is finished. This can be useful for long running RPC's that need to send lots of data back. 
+
 
 ## Notes 
 
