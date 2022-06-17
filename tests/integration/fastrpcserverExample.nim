@@ -5,7 +5,6 @@ import mcu_utils/allocstats
 import fastrpc/server/fastrpcserver
 import fastrpc/server/rpcmethods
 
-import json
 import random
 
 # Define RPC Server #
