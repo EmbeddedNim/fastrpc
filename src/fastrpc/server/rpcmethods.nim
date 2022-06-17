@@ -80,7 +80,7 @@ proc mkParamsType*(paramsIdent, paramsType, params: NimNode): NimNode =
   typObj[0][2][2] = recList
   result = typObj
 
-macro rpcImpl*(p: untyped, publish: untyped, qarg: untyped): untyped =
+macro rpcImpl*(p: untyped, publish: untyped, rname: untyped): untyped =
   ## Define a remote procedure call.
   ## Input and return parameters are defined using proc's with the `rpc` 
   ## pragma. 
@@ -105,11 +105,15 @@ macro rpcImpl*(p: untyped, publish: untyped, qarg: untyped): untyped =
   var
     parameters = params
 
+  echo "rpcmethods: ", rname.treeRepr()
+
   let
     # determine if this is a "system" rpc method
     pubthread = publish.kind == nnkStrLit and publish.strVal == "thread"
     serializer = publish.kind == nnkStrLit and publish.strVal == "serializer"
     syspragma = not pragmas.findChild(it.repr == "system").isNil
+
+    routerName = ident(rname.strVal)
 
     # rpc method names
     pathStr = $path
@@ -161,24 +165,11 @@ macro rpcImpl*(p: untyped, publish: untyped, qarg: untyped): untyped =
 
     if syspragma:
       result.add quote do:
-        sysRegister(router, `path`, `rpcMethod`)
+        sysRegister(`routerName`, `path`, `rpcMethod`)
     else:
       result.add quote do:
-        register(router, `path`, `rpcMethod`)
+        register(`routerName`, `path`, `rpcMethod`)
 
-  elif pubthread:
-    result.add quote do:
-      var `rpcMethod`: FastRpcEventProc
-      template `procName`(): `ReturnType` =
-        `procBody`
-      closureScope: # 
-        `rpcMethod` =
-
-          proc(): FastRpcParamsBuffer =
-            let res = `procName`()
-            result = rpcPack(res)
-
-      register(router, `path`, `qarg`.evt, `rpcMethod`)
   elif serializer:
     var rpcFunc = quote do:
       proc `procName`(): `ReturnType` =
@@ -202,7 +193,10 @@ macro rpcGetter*(p: untyped): untyped =
   result = p
 
 template rpc*(p: untyped): untyped =
-  rpcImpl(p, nil, nil)
+  rpcImpl(p, nil, "router")
+
+template rpcs*(rname: untyped, p: untyped): untyped =
+  rpcImpl(p, nil, rname)
 
 template rpcPublisher*(args: static[Millis], p: untyped): untyped =
   rpcImpl(p, args, nil)
@@ -213,7 +207,7 @@ template rpcThread*(p: untyped): untyped =
 template rpcSerializer*(p: untyped): untyped =
   # rpcImpl(p, "thread", qarg)
   # static: echo "RPCSERIALIZER:\n", treeRepr p
-  rpcImpl(p, "serializer", nil)
+  rpcImpl(p, "serializer", "router")
 
 macro DefineRpcs*(name: untyped, args: varargs[untyped]) =
   ## annotates that a proc is an `rpcRegistrationProc` and
@@ -225,10 +219,6 @@ macro DefineRpcs*(name: untyped, args: varargs[untyped]) =
              else: newSeq[NimNode]()
     pbody = args[^1]
 
-  # if router.repr != "var FastRpcRouter":
-  #   error("Incorrect definition for a `rpcNamespace`." &
-  #   "The first parameter to an rpc registration namespace must be named `router` and be of type `var FastRpcRouter`." &
-  #   " Instead got: `" & treeRepr(router) & "`")
   let rname = ident("router")
   result = quote do:
     proc `name`*(`rname`: var FastRpcRouter) =
@@ -266,17 +256,6 @@ macro registerRpcs*(router: var FastRpcRouter,
                     args: varargs[untyped]) =
   result = quote do:
     `registerClosure`(`router`, `args`) # 
-
-# template startDataStream*(
-#         streamProc: untyped,
-#         streamThread: untyped,
-#         queue: untyped,
-#         ): RpcStreamThread[T,U] =
-#   var tchan: Chan[TaskOption[U]] = newChan[TaskOption[U]](1)
-#   var arg = ThreadArg[T,U](queue: iqueue, chan: tchan)
-#   var result: RpcStreamThread[T, U]
-#   createThread[ThreadArg[T, U]](result, streamThread, move arg)
-#   result
 
 macro registerDatastream*[T,O,R](
               router: var FastRpcRouter,

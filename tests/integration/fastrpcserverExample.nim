@@ -9,25 +9,25 @@ import json
 import random
 
 # Define RPC Server #
-DefineRpcs(name=exampleRpcs):
+proc exampleRpcs(router: var FastRpcRouter) =
 
-  proc add(a: int, b: int): int {.rpc.} =
+  proc add(a: int, b: int): int {.rpcs(router).} =
     result = 1 + a + b
 
-  proc addAll(vals: seq[int]): int {.rpc.} =
+  proc addAll(vals: seq[int]): int {.rpcs(router).} =
     for val in vals:
       result = result + val
 
-  proc multAll(x: int, vals: seq[int]): seq[int] {.rpc.} =
+  proc multAll(x: int, vals: seq[int]): seq[int] {.rpcs(router).} =
     result = newSeqOfCap[int](vals.len())
     for val in vals:
       result.add val * x
 
-  proc echos(msg: string): string {.rpc.} =
+  proc echos(msg: string): string {.rpcs(router).} =
     echo("echos: ", "hello ", msg)
     result = "hello: " & msg
 
-  proc echorepeat(msg: string, count: int): string {.rpc.} =
+  proc echorepeat(msg: string, count: int): string {.rpcs(router).} =
     let rmsg = "hello " & msg
     for i in 0..count:
       echo("echos: ", rmsg)
@@ -36,7 +36,7 @@ DefineRpcs(name=exampleRpcs):
       os.sleep(400)
     result = "k bye"
 
-  proc simulatelongcall(cntMillis: int): Millis {.rpc.} =
+  proc simulatelongcall(cntMillis: int): Millis {.rpcs(router).} =
 
     let t0 = getMonoTime().ticks div 1_000_000
     echo("simulatelongcall: ", )
@@ -45,8 +45,7 @@ DefineRpcs(name=exampleRpcs):
 
     return Millis(t1-t0)
 
-
-  proc testerror(msg: string): string {.rpc.} =
+  proc testerror(msg: string): string {.rpcs(router).} =
     echo("test error: ", "what is your favorite color?")
     if msg != "Blue":
       raise newException(ValueError, "wrong answer!")
