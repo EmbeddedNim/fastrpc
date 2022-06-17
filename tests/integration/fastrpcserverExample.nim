@@ -70,54 +70,6 @@ proc addExampleRpcs(router: var FastRpcRouter) =
       raise newException(ValueError, "wrong answer!")
     result = "correct: " & msg
 
-type
-  TimerDataQ = InetEventQueue[seq[int64]]
-
-  TimerOptions {.rpcOption.} = object
-    delay: Millis
-    count: int
-
-
-proc timeSerializer(queue: TimerDataQ): seq[int64] {.rpcserializer.} =
-  ## called by the socket server every time there's data
-  ## on the queue argument given the `rpcEventSubscriber`.
-  ## 
-  # var tvals: seq[int64]
-  if queue.tryRecv(result):
-    let rs = rand(200)
-    os.sleep(rs)
-    echo "ts: ", result.len()
-
-proc timeSampler*(queue: TimerDataQ, opts: TaskOption[TimerOptions]) {.rpcThread.} =
-  ## Thread example that runs the as a time publisher. This is a reducer
-  ## that gathers time samples and outputs arrays of timestamp samples.
-  var data = opts.data
-
-  while true:
-    logAllocStats(lvlInfo):
-      var tvals = newSeqOfCap[int64](data.count)
-      for i in 0..<data.count:
-        var ts = int64(getMonoTime().ticks() div 1000)
-        tvals.add ts
-        #os.sleep(data.delay.int div (2*data.count))
-
-      logInfo "timePublisher:", "ts:", tvals[0], "len:", tvals.len.repr
-      logInfo "queue:len:", queue.chan.peek()
-
-      # let newOpts = opts.getUpdatedOption()
-      # if newOpts.isSome:
-        # echo "setting new parameters: ", repr(newOpts)
-        # data = newOpts.get()
-
-      os.sleep(data.delay.int)
-      var qvals = isolate tvals
-      discard queue.trySend(qvals)
-
-proc streamThread*(arg: ThreadArg[seq[int64], TimerOptions]) {.thread, nimcall.} = 
-  os.sleep(5_000)
-  echo "streamThread: ", repr(arg.opt.data)
-  timeSampler(arg.queue, arg.opt)
-
 when isMainModule:
   let inetAddrs = [
     newInetAddr("0.0.0.0", 5656, Protocol.IPPROTO_UDP),
