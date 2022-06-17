@@ -105,6 +105,7 @@ proc streamThread*(arg: ThreadArg[seq[int64], TimerOptions]) {.thread, nimcall.}
   echo "streamThread: ", repr(arg.opt.data)
   timeSampler(arg.queue, arg.opt)
 
+
 when isMainModule:
   let inetAddrs = [
     newInetAddr("0.0.0.0", 5656, Protocol.IPPROTO_UDP),
@@ -113,12 +114,48 @@ when isMainModule:
     newInetAddr("::", 5555, Protocol.IPPROTO_TCP),
   ]
 
+  echo "setup timer thread"
+  var
+    timer1q = TimerDataQ.init(10)
+    timerOpt = TimerOptions(delay: 1_000.Millis, count: 10)
+
+  var tchan: Chan[TimerOptions] = newChan[TimerOptions](1)
+  var topt = TaskOption[TimerOptions](data: timerOpt, ch: tchan)
+  var arg = ThreadArg[seq[int64],TimerOptions](queue: timer1q, opt: topt)
+  var result: RpcStreamThread[seq[int64], TimerOptions]
+  createThread[ThreadArg[seq[int64], TimerOptions]](result, streamThread, move arg)
+
+  # echo "start timer thread"
+  # var timerThr = startDataStream(
+  #   timeSampler,
+  #   streamThread,
+  #   timer1q,
+  #   timerOpt,
+  # )
+
+  os.sleep(5_000)
   echo "running fast rpc example"
   var router = newFastRpcRouter()
 
   # register the `exampleRpcs` with our RPC router
   router.addBasicExampleRpcs()
   router.addExampleRpcs()
+
+  # register a `datastream` with our RPC router
+  echo "register datastream"
+  router.registerDataStream(
+    "microspub",
+    serializer=timeSerializer,
+    reducer=timeSampler, 
+    queue = timer1q,
+    option = timerOpt,
+    optionRpcs = proc (router: FastRpcRouter) = echo "none"
+  )
+
+  let maddr = newClientHandle("ff12::1", 2048, -1.SocketHandle, net.IPPROTO_UDP)
+  logInfo "app_net_rpc:", "multicast-addr:", repr maddr
+  let mpub = router.subscribe("microspub", maddr, timeout = 0.Millis, source = "")
+  logInfo "app_net_rpc:", "multicast-publish:", repr mpub
 
   # print out all our new rpc's!
   for rpc in router.procs.keys():
