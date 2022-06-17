@@ -58,23 +58,6 @@ type
     delay: Millis
     count: int
 
-DefineRpcTaskOptions[TimerOptions](name=timerOptionsRpcs):
-  proc setDelay(opt: var TimerOptions, delayMs: int): bool {.rpcSetter.} =
-    ## called by the socket server every time there's data
-    ## on the queue argument given the `rpcEventSubscriber`.
-    ## 
-    if delayMs < 10_000:
-      opt.delay = Millis(delayMs)
-      return true
-    else:
-      return false
-  
-  proc getDelay(option: var TimerOptions): int {.rpcGetter.} =
-    ## called by the socket server every time there's data
-    ## on the queue argument given the `rpcEventSubscriber`.
-    ## 
-    result = option.delay.int
-  
 
 proc timeSerializer(queue: TimerDataQ): seq[int64] {.rpcSerializer.} =
   ## called by the socket server every time there's data
@@ -159,7 +142,7 @@ when isMainModule:
     reducer=timeSampler, 
     queue = timer1q,
     option = timerOpt,
-    optionRpcs = timerOptionsRpcs,
+    optionRpcs = proc (router: FastRpcRouter) = echo "none"
   )
 
   let maddr = newClientHandle("ff12::1", 2048, -1.SocketHandle, net.IPPROTO_UDP)
