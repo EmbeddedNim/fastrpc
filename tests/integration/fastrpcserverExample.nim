@@ -9,17 +9,31 @@ import json
 import random
 
 # Define RPC Server #
-proc addBasicExampleRpcs(router: var FastRpcRouter) =
 
-  proc add(a: int, b: int): int {.rpcRegister(router).} =
-    result = 1 + a + b
+proc addBasicExampleRpcs(router: var FastRpcRouter) =
+  type AddRpcParams = object
+    a: int
+    b: int
+
+  proc add(args: AddRpcParams, context: RpcContext): int =
+    result = args.a + args.b
+
+  proc addRpc(params: FastRpcParamsBuffer, context: RpcContext): FastRpcParamsBuffer {.gcsafe, nimcall.} =
+    var obj: AddRpcParams
+    obj.rpcUnpack(params)
+
+    let res = add(obj, context)
+    result = res.rpcPack()
+  
+  router.rpcRegister("add", addRpc)
+
+
+# Define RPC Server with helper pragmas #
+proc addExampleRpcs(router: var FastRpcRouter) =
 
   proc addAll(vals: seq[int]): int {.rpcRegister(router).} =
     for val in vals:
       result = result + val
-
-# Define RPC Server with helper pragmas #
-proc addExampleRpcs(router: var FastRpcRouter) =
 
   proc mul(a: int, b: int): int {.rpcRegister(router).} =
     result = a * b

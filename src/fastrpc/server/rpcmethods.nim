@@ -209,7 +209,7 @@ template rpcSerializer*(p: untyped): untyped =
   # static: echo "RPCSERIALIZER:\n", treeRepr p
   rpcImpl(p, "serializer", "router")
 
-macro DefineRpcs*(name: untyped, args: varargs[untyped]) =
+macro DefineRpcs*(name: untyped, args: varargs[untyped]) {.deprecated.} =
   ## annotates that a proc is an `rpcRegistrationProc` and
   ## that it takes the correct arguments. In particular 
   ## the first parameter must be `router: var FastRpcRouter`. 
