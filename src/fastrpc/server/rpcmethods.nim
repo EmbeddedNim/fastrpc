@@ -168,7 +168,7 @@ macro rpcImpl*(p: untyped, publish: untyped, rname: untyped): untyped =
         sysRegister(`routerName`, `path`, `rpcMethod`)
     else:
       result.add quote do:
-        register(`routerName`, `path`, `rpcMethod`)
+        rpcRegister(`routerName`, `path`, `rpcMethod`)
 
   elif serializer:
     var rpcFunc = quote do:
@@ -195,7 +195,7 @@ macro rpcGetter*(p: untyped): untyped =
 template rpc*(p: untyped): untyped =
   rpcImpl(p, nil, "router")
 
-template rpcs*(rname: untyped, p: untyped): untyped =
+template rpcRegister*(rname: untyped, p: untyped): untyped =
   rpcImpl(p, nil, rname)
 
 template rpcPublisher*(args: static[Millis], p: untyped): untyped =
@@ -270,7 +270,7 @@ macro registerDatastream*[T,O,R](
     let serClosure: RpcStreamSerializerClosure =
             `serializer`(`queue`)
     `optionRpcs`(`router`)
-    router.register(`name`, `queue`.evt, serClosure)
+    router.rpcRegister(`name`, `queue`.evt, serClosure)
 
   echo "REG:DATASTREAM:\n", result.repr
   echo ""

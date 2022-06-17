@@ -43,7 +43,7 @@ proc createRpcRouter*(): FastRpcRouter =
   result = new(FastRpcRouter)
   result.procs = initTable[string, FastRpcProc]()
 
-proc register*(router: var FastRpcRouter;
+proc rpcRegister*(router: var FastRpcRouter;
                path: string,
                evt: SelectEvent,
                serializer: RpcStreamSerializerClosure) =
@@ -52,7 +52,7 @@ proc register*(router: var FastRpcRouter;
   router.subEventProcs[evt] = RpcSubClients(eventProc: serializer, subs: subs)
   echo "registering:sub: ", path
 
-proc register*(router: var FastRpcRouter, path: string, call: FastRpcProc) =
+proc rpcRegister*(router: var FastRpcRouter, path: string, call: FastRpcProc) =
   router.procs[path] = call
   echo "registering: ", path
 

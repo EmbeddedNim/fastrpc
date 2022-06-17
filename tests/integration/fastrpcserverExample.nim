@@ -9,25 +9,25 @@ import json
 import random
 
 # Define RPC Server #
-proc exampleRpcs(router: var FastRpcRouter) =
+proc addExampleRpcs(router: var FastRpcRouter) =
 
-  proc add(a: int, b: int): int {.rpcs(router).} =
+  proc add(a: int, b: int): int {.rpcRegister(router).} =
     result = 1 + a + b
 
-  proc addAll(vals: seq[int]): int {.rpcs(router).} =
+  proc addAll(vals: seq[int]): int {.rpcRegister(router).} =
     for val in vals:
       result = result + val
 
-  proc multAll(x: int, vals: seq[int]): seq[int] {.rpcs(router).} =
+  proc multAll(x: int, vals: seq[int]): seq[int] {.rpcRegister(router).} =
     result = newSeqOfCap[int](vals.len())
     for val in vals:
       result.add val * x
 
-  proc echos(msg: string): string {.rpcs(router).} =
+  proc echos(msg: string): string {.rpcRegister(router).} =
     echo("echos: ", "hello ", msg)
     result = "hello: " & msg
 
-  proc echorepeat(msg: string, count: int): string {.rpcs(router).} =
+  proc echorepeat(msg: string, count: int): string {.rpcRegister(router).} =
     let rmsg = "hello " & msg
     for i in 0..count:
       echo("echos: ", rmsg)
@@ -36,7 +36,7 @@ proc exampleRpcs(router: var FastRpcRouter) =
       os.sleep(400)
     result = "k bye"
 
-  proc simulatelongcall(cntMillis: int): Millis {.rpcs(router).} =
+  proc simulatelongcall(cntMillis: int): Millis {.rpcRegister(router).} =
 
     let t0 = getMonoTime().ticks div 1_000_000
     echo("simulatelongcall: ", )
@@ -45,7 +45,7 @@ proc exampleRpcs(router: var FastRpcRouter) =
 
     return Millis(t1-t0)
 
-  proc testerror(msg: string): string {.rpcs(router).} =
+  proc testerror(msg: string): string {.rpcRegister(router).} =
     echo("test error: ", "what is your favorite color?")
     if msg != "Blue":
       raise newException(ValueError, "wrong answer!")
@@ -59,7 +59,7 @@ type
     count: int
 
 
-proc timeSerializer(queue: TimerDataQ): seq[int64] {.rpcSerializer.} =
+proc timeSerializer(queue: TimerDataQ): seq[int64] {.rpcserializer.} =
   ## called by the socket server every time there's data
   ## on the queue argument given the `rpcEventSubscriber`.
   ## 
@@ -132,7 +132,7 @@ when isMainModule:
   var router = newFastRpcRouter()
 
   # register the `exampleRpcs` with our RPC router
-  router.registerRpcs(exampleRpcs)
+  router.addExampleRpcs()
 
   # register a `datastream` with our RPC router
   echo "register datastream"
