@@ -13,7 +13,7 @@ when false:
       let idx = if_nametoindex("en0")
       let res = setsockopt(sock.getFd(), posix.IPPROTO_IP, SO_BINDTODEVICE, addr idx, sizeof(idx).SockLen)
 
-when defined(linux):
+when defined(linux) or defined(macosx):
 
   proc isClosed(socket: Socket): bool =
     socket.getFd() == osInvalidSocket
