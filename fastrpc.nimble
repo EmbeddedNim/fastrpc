@@ -15,7 +15,7 @@ requires "progress >= 0.1.0"
 requires "msgpack4nim >= 0.3.1"
 requires "threading >= 0.1.0"
 requires "cligen >= 0.1.0"
-requires "https://github.com/EmbeddedNim/mcu_utils#head"
+requires "mcu_utils >= 0.3.3"
 
 task build_integration_tests, "build integration test tools":
   exec "nim c tests/integration/fastrpcserverExample.nim"
